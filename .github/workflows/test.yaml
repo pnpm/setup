@@ -74,9 +74,7 @@ jobs:
         uses: ./
         with:
           version: '11.0.4'
-          runtime: |
-            name: node
-            version: '${{ matrix.major }}'
+          runtime: node@${{ matrix.major }}
 
       - name: 'Test: node binary on PATH'
         env:
@@ -117,9 +115,7 @@ jobs:
       - uses: ./
         with:
           version: '11.0.4'
-          runtime: |
-            name: bun
-            version: latest
+          runtime: bun@latest
       - name: 'Test: bun on PATH'
         run: |
           set -e
@@ -135,9 +131,7 @@ jobs:
       - uses: ./
         with:
           version: '11.0.4'
-          runtime: |
-            name: deno
-            version: '2'
+          runtime: deno@2
       - name: 'Test: deno on PATH'
         run: |
           set -e
@@ -204,9 +198,9 @@ jobs:
         shell: bash
 
   runtime-version-fallback:
-    # `runtime: { name: node }` without `version` should fall back to the
+    # `runtime: node` without an `@<version>` suffix should fall back to the
     # version declared in devEngines.runtime.
-    name: 'runtime.version falls back to devEngines'
+    name: 'runtime version falls back to devEngines'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -227,8 +221,7 @@ jobs:
       - id: pnpm
         uses: ./
         with:
-          runtime: |
-            name: node
+          runtime: node
 
       - name: 'Test: node 20 via fallback'
         run: |

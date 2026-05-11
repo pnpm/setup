@@ -1,9 +1,9 @@
-import { getBooleanInput, getInput, InputOptions, error } from '@actions/core'
+import { getBooleanInput, getInput, InputOptions } from '@actions/core'
 import expandTilde from 'expand-tilde'
-import { parse as parseYaml } from 'yaml'
-import { z, ZodError } from 'zod'
 
 export type RuntimeName = 'node' | 'bun' | 'deno'
+
+const SUPPORTED_RUNTIMES: readonly RuntimeName[] = ['node', 'bun', 'deno']
 
 export interface RuntimeInput {
   readonly name: RuntimeName
@@ -25,34 +25,28 @@ const options: InputOptions = {
 
 const parseInputPath = (name: string) => expandTilde(getInput(name, options))
 
-const RuntimeSchema = z.object({
-  name: z.enum(['node', 'bun', 'deno']),
-  version: z.string().optional(),
-})
-
 function parseRuntime(): RuntimeInput | undefined {
   const raw = getInput('runtime').trim()
   if (!raw) return undefined
 
-  let parsed: unknown
-  try {
-    parsed = parseYaml(raw)
-  } catch (exception: unknown) {
-    error(`Error parsing input "runtime" = ${raw}`)
-    throw exception
-  }
-  if (parsed === null || parsed === undefined) return undefined
+  const atIndex = raw.indexOf('@')
+  const name = (atIndex === -1 ? raw : raw.slice(0, atIndex)).trim()
+  const version = atIndex === -1 ? undefined : raw.slice(atIndex + 1).trim()
 
-  try {
-    return RuntimeSchema.parse(parsed)
-  } catch (exception: unknown) {
-    error(`Invalid value for input "runtime" = ${raw}`)
-    if (exception instanceof ZodError) {
-      error(`Errors: ${JSON.stringify(exception.errors)}`)
-    }
-    error(`Expected: { name: node | bun | deno, version?: string }`)
-    throw exception
+  if (!isSupportedRuntime(name)) {
+    throw new Error(
+      `Invalid \`runtime\` input "${raw}". Expected \`<name>\` or \`<name>@<version>\` where name is one of: ${SUPPORTED_RUNTIMES.join(', ')}.`,
+    )
   }
+  if (version !== undefined && version === '') {
+    throw new Error(`Invalid \`runtime\` input "${raw}". Trailing \`@\` with no version.`)
+  }
+
+  return { name, version }
+}
+
+function isSupportedRuntime(name: string): name is RuntimeName {
+  return (SUPPORTED_RUNTIMES as readonly string[]).includes(name)
 }
 
 export const getInputs = (): Inputs => ({

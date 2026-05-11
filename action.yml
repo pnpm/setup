@@ -13,15 +13,14 @@ inputs:
     default: ~/setup-pnpm
   runtime:
     description: |
-      Runtime to install, as a YAML object matching `devEngines.runtime` in
-      package.json. `name` must be `node`, `bun`, or `deno`. `version` is
-      optional — if omitted, falls back to the version declared in
-      `devEngines.runtime`, or to `lts` (for `node`) / `latest` (others).
+      Runtime to install, in `<name>` or `<name>@<version>` form (matching
+      pnpm's `packageManager` field syntax). Supported names: `node`, `bun`,
+      `deno`. Examples: `node@22`, `node@lts`, `node@^24.4.0`, `bun@latest`,
+      `deno@2`.
 
-      Example:
-        runtime:
-          name: node
-          version: '22'
+      When the version is omitted, the action falls back to the version
+      declared in `devEngines.runtime` for the same name, or to `lts` (for
+      `node`) / `latest` for others.
 
       If this input is omitted entirely, the action reads `devEngines.runtime`
       from the project's package.json. If that is also missing, no runtime is

@@ -12,7 +12,7 @@ If your `package.json` declares `devEngines.runtime`, the action picks up the ru
 |------|-------------|
 | `version` | Version of pnpm to install. Optional when `packageManager` is set in `package.json`. |
 | `dest` | Where to store pnpm files. Defaults to `~/setup-pnpm`. |
-| `runtime` | YAML object matching `devEngines.runtime` in `package.json` — `name` (`node` \| `bun` \| `deno`) and optional `version`. If omitted, falls back to `devEngines.runtime` in `package.json`. |
+| `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime` in `package.json`, then to `lts` (for `node`) / `latest`. If the input itself is omitted, the action reads `devEngines.runtime` from `package.json`. |
 | `cache` | Cache the pnpm store directory. Default: `false`. |
 | `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Default: `pnpm-lock.yaml`. |
 | `package-json-file` | Path to `package.json` (relative to `GITHUB_WORKSPACE`). Default: `package.json`. |
@@ -66,9 +66,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: pnpm/setup@v1
         with:
-          runtime: |
-            name: node
-            version: ${{ matrix.node }}
+          runtime: node@${{ matrix.node }}
       - run: pnpm test
 ```
 
@@ -77,15 +75,11 @@ jobs:
 ```yaml
 - uses: pnpm/setup@v1
   with:
-    runtime:
-      name: bun
-      version: latest
+    runtime: bun@latest
 
 - uses: pnpm/setup@v1
   with:
-    runtime:
-      name: deno
-      version: '2'
+    runtime: deno@2
 ```
 
 ### Cache the pnpm store
