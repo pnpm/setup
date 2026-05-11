@@ -20,8 +20,16 @@ export function runPnpmInstall(inputs: Inputs) {
     return
   }
 
-  startGroup('Running pnpm install...')
-  const { error, status } = spawnSync('pnpm', ['install'], {
+  // When the user pinned a runtime explicitly via the `runtime` input, we've
+  // already installed it via `pnpm runtime set` above. Pass `--no-runtime`
+  // to `pnpm install` so the matrix/explicit node isn't shadowed by a
+  // different version from `devEngines.runtime` on the same install.
+  // Requires pnpm >= 11.1.0 (the version that introduced `--no-runtime`).
+  const args = ['install']
+  if (inputs.runtime) args.push('--no-runtime')
+
+  startGroup(`Running pnpm ${args.join(' ')}...`)
+  const { error, status } = spawnSync('pnpm', args, {
     stdio: 'inherit',
     cwd: GITHUB_WORKSPACE,
     shell: true,
