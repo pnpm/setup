@@ -1,7 +1,6 @@
 import { warning, startGroup, endGroup } from '@actions/core'
 import { spawnSync } from 'child_process'
 import { Inputs } from '../inputs'
-import { patchPnpmEnv } from '../utils'
 
 export function pruneStore(inputs: Inputs) {
   if (!inputs.cache) {
@@ -13,7 +12,6 @@ export function pruneStore(inputs: Inputs) {
   const { error, status } = spawnSync('pnpm', ['store', 'prune'], {
     stdio: 'inherit',
     shell: true,
-    env: patchPnpmEnv(inputs),
   })
   endGroup()
 
