@@ -8,8 +8,9 @@ import { execSync } from 'child_process'
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import { fileURLToPath } from 'url'
 
-const BOOTSTRAP_DIR = new URL('../src/install-pnpm/bootstrap/', import.meta.url).pathname
+const BOOTSTRAP_DIR = fileURLToPath(new URL('../src/install-pnpm/bootstrap/', import.meta.url))
 
 const version = process.argv[2] || resolveLatestVersion()
 

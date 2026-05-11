@@ -36,8 +36,15 @@ export async function installRuntime(
   binDest: string,
 ): Promise<InstalledRuntime | undefined> {
   startGroup(`Installing runtime ${request.name}@${request.version}...`)
-  const exitCode = await runPnpm(binDest, ['runtime', 'set', request.name, request.version, '-g'])
-  endGroup()
+  let exitCode: number
+  try {
+    exitCode = await runPnpm(binDest, ['runtime', 'set', request.name, request.version, '-g'])
+  } catch (err: unknown) {
+    setFailed(`pnpm runtime set ${request.name} ${request.version} -g failed: ${err instanceof Error ? err.message : String(err)}`)
+    return undefined
+  } finally {
+    endGroup()
+  }
 
   if (exitCode !== 0) {
     setFailed(`pnpm runtime set ${request.name} ${request.version} -g exited with code ${exitCode}`)
