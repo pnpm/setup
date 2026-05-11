@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/action-setup-runtime@v1
+      - uses: pnpm/setup@v1
       - run: node --version
       - run: pnpm install
       - run: pnpm test
@@ -65,7 +65,7 @@ jobs:
         node: [20, 22, 24]
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/action-setup-runtime@v1
+      - uses: pnpm/setup@v1
         with:
           runtime: node
           runtime_version: ${{ matrix.node }}
@@ -76,12 +76,12 @@ jobs:
 ### Install Bun or Deno
 
 ```yaml
-- uses: pnpm/action-setup-runtime@v1
+- uses: pnpm/setup@v1
   with:
     runtime: bun
     runtime_version: latest
 
-- uses: pnpm/action-setup-runtime@v1
+- uses: pnpm/setup@v1
   with:
     runtime: deno
     runtime_version: '2'
@@ -90,7 +90,7 @@ jobs:
 ### Cache the pnpm store
 
 ```yaml
-- uses: pnpm/action-setup-runtime@v1
+- uses: pnpm/setup@v1
   with:
     cache: true
 - run: pnpm install
