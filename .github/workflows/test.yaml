@@ -1,0 +1,259 @@
+name: Test Action
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    # Bootstrap install + pnpm on PATH across OSes. Mirrors the action-setup
+    # smoke test so any regression in the standalone bootstrap path is caught.
+    name: 'Smoke (${{ matrix.os }} / pnpm ${{ matrix.version }})'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            version: '11.0.4'
+          - os: macos-latest
+            version: '11.0.4'
+          - os: windows-latest
+            version: '11.0.4'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: pnpm
+        uses: ./
+        with:
+          version: ${{ matrix.version }}
+
+      - name: 'Test: pnpm version on PATH matches request'
+        env:
+          BIN_DEST: ${{ steps.pnpm.outputs.bin_dest }}
+          REQUIRED: ${{ matrix.version }}
+        run: |
+          set -e
+          which pnpm
+          actual="$(pnpm --version)"
+          echo "pnpm --version: ${actual}"
+          if [ "${actual}" != "${REQUIRED}" ]; then
+            echo "Expected pnpm ${REQUIRED}, got ${actual}"
+            exit 1
+          fi
+          bin_dest_version="$("$BIN_DEST/pnpm" --version)"
+          if [ "${bin_dest_version}" != "${REQUIRED}" ]; then
+            echo "Expected ${REQUIRED} via bin_dest, got ${bin_dest_version}"
+            exit 1
+          fi
+        shell: bash
+
+  runtime-node:
+    # Explicit runtime input across OSes. Asserts node binary is on PATH and
+    # the action's outputs reflect what was installed.
+    name: 'Runtime node@${{ matrix.runtime_version }} (${{ matrix.os }})'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            runtime_version: '22'
+          - os: macos-latest
+            runtime_version: '22'
+          - os: windows-latest
+            runtime_version: '22'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: pnpm
+        uses: ./
+        with:
+          version: '11.0.4'
+          runtime: node
+          runtime_version: ${{ matrix.runtime_version }}
+
+      - name: 'Test: node binary on PATH'
+        env:
+          MAJOR: ${{ matrix.runtime_version }}
+        run: |
+          set -e
+          which node
+          actual="$(node --version)"
+          echo "node --version: ${actual}"
+          case "${actual}" in
+            v${MAJOR}.*) echo "ok" ;;
+            *) echo "Expected node v${MAJOR}.x, got ${actual}"; exit 1 ;;
+          esac
+        shell: bash
+
+      - name: 'Test: outputs.runtime and outputs.runtime_version'
+        env:
+          OUT_RUNTIME: ${{ steps.pnpm.outputs.runtime }}
+          OUT_VERSION: ${{ steps.pnpm.outputs.runtime_version }}
+          EXPECTED_VERSION: ${{ matrix.runtime_version }}
+        run: |
+          set -e
+          if [ "${OUT_RUNTIME}" != "node" ]; then
+            echo "Expected outputs.runtime=node, got ${OUT_RUNTIME}"
+            exit 1
+          fi
+          if [ "${OUT_VERSION}" != "${EXPECTED_VERSION}" ]; then
+            echo "Expected outputs.runtime_version=${EXPECTED_VERSION}, got ${OUT_VERSION}"
+            exit 1
+          fi
+        shell: bash
+
+  runtime-bun:
+    name: Runtime bun
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./
+        with:
+          version: '11.0.4'
+          runtime: bun
+          runtime_version: latest
+      - name: 'Test: bun on PATH'
+        run: |
+          set -e
+          which bun
+          bun --version
+        shell: bash
+
+  runtime-deno:
+    name: Runtime deno
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./
+        with:
+          version: '11.0.4'
+          runtime: deno
+          runtime_version: '2'
+      - name: 'Test: deno on PATH'
+        run: |
+          set -e
+          which deno
+          deno --version
+        shell: bash
+
+  runtime-from-devengines:
+    # No `runtime` input — the action should pick up devEngines.runtime from
+    # package.json and install it.
+    name: 'Runtime from devEngines.runtime'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up package.json with devEngines.runtime
+        run: |
+          cat > package.json <<'EOF'
+          {
+            "packageManager": "pnpm@11.0.4",
+            "devEngines": {
+              "runtime": { "name": "node", "version": "^22.0.0", "onFail": "download" }
+            }
+          }
+          EOF
+        shell: bash
+
+      - id: pnpm
+        uses: ./
+
+      - name: 'Test: node 22 is installed via devEngines.runtime'
+        env:
+          OUT_RUNTIME: ${{ steps.pnpm.outputs.runtime }}
+          OUT_VERSION: ${{ steps.pnpm.outputs.runtime_version }}
+        run: |
+          set -e
+          which node
+          actual="$(node --version)"
+          echo "node --version: ${actual}"
+          case "${actual}" in
+            v22.*) ;;
+            *) echo "Expected node v22.x, got ${actual}"; exit 1 ;;
+          esac
+          if [ "${OUT_RUNTIME}" != "node" ]; then
+            echo "Expected outputs.runtime=node, got ${OUT_RUNTIME}"
+            exit 1
+          fi
+          if [ "${OUT_VERSION}" != "^22.0.0" ]; then
+            echo "Expected outputs.runtime_version=^22.0.0, got ${OUT_VERSION}"
+            exit 1
+          fi
+        shell: bash
+
+  runtime-version-fallback:
+    # `runtime: node` without `runtime_version` should fall back to the version
+    # declared in devEngines.runtime.
+    name: 'runtime_version falls back to devEngines'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up package.json with devEngines.runtime version
+        run: |
+          cat > package.json <<'EOF'
+          {
+            "packageManager": "pnpm@11.0.4",
+            "devEngines": {
+              "runtime": { "name": "node", "version": "^20.0.0", "onFail": "download" }
+            }
+          }
+          EOF
+        shell: bash
+
+      - id: pnpm
+        uses: ./
+        with:
+          runtime: node
+
+      - name: 'Test: node 20 via fallback'
+        run: |
+          set -e
+          actual="$(node --version)"
+          echo "node --version: ${actual}"
+          case "${actual}" in
+            v20.*) ;;
+            *) echo "Expected node v20.x, got ${actual}"; exit 1 ;;
+          esac
+        shell: bash
+
+  no-runtime:
+    # No runtime input, no devEngines.runtime. Action should install pnpm and
+    # skip the runtime step. outputs.runtime/runtime_version should be empty.
+    name: 'No runtime requested'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up package.json without devEngines.runtime
+        run: echo '{"packageManager":"pnpm@11.0.4"}' > package.json
+        shell: bash
+
+      - id: pnpm
+        uses: ./
+
+      - name: 'Test: pnpm works, runtime outputs are empty'
+        env:
+          OUT_RUNTIME: ${{ steps.pnpm.outputs.runtime }}
+          OUT_VERSION: ${{ steps.pnpm.outputs.runtime_version }}
+        run: |
+          set -e
+          which pnpm
+          pnpm --version
+          if [ -n "${OUT_RUNTIME}" ]; then
+            echo "Expected outputs.runtime to be empty, got '${OUT_RUNTIME}'"
+            exit 1
+          fi
+          if [ -n "${OUT_VERSION}" ]; then
+            echo "Expected outputs.runtime_version to be empty, got '${OUT_VERSION}'"
+            exit 1
+          fi
+        shell: bash

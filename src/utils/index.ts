@@ -1,0 +1,10 @@
+import path from 'path'
+import process from 'process'
+import { Inputs } from '../inputs'
+
+export const getBinDest = (inputs: Inputs): string => path.join(inputs.dest, 'node_modules', '.bin')
+
+export const patchPnpmEnv = (inputs: Inputs): NodeJS.ProcessEnv => ({
+  ...process.env,
+  PATH: path.join(getBinDest(inputs), 'bin') + path.delimiter + getBinDest(inputs) + path.delimiter + process.env.PATH,
+})

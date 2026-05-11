@@ -1,0 +1,28 @@
+name: pr-check
+
+on: [pull_request]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  check-dist:
+    # Guarantees the committed dist/index.js matches the current source.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+          run_install: true
+
+      - name: Build dist/index.js
+        run: pnpm run build
+
+      - name: Check for uncommitted changes in dist
+        run: git diff --exit-code dist/index.js

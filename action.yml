@@ -1,0 +1,53 @@
+name: Setup pnpm with runtime
+description: Install pnpm and a JavaScript runtime (Node.js, Bun, or Deno) in one step
+branding:
+  icon: package
+  color: orange
+inputs:
+  version:
+    description: Version of pnpm to install
+    required: false
+  dest:
+    description: Where to store pnpm files
+    required: false
+    default: ~/setup-pnpm
+  runtime:
+    description: |
+      Runtime to install: node, bun, or deno. If omitted, the action reads
+      `devEngines.runtime` from the project's package.json. If that is also
+      missing, no runtime is installed.
+    required: false
+  runtime_version:
+    description: |
+      Version of the runtime to install (e.g. `22`, `lts`, `latest`, `^24.4.0`).
+      If omitted, falls back to the version declared in `devEngines.runtime`.
+    required: false
+  run_install:
+    description: If specified, run `pnpm install`
+    required: false
+    default: 'null'
+  cache:
+    description: Whether to cache the pnpm store directory
+    required: false
+    default: 'false'
+  cache_dependency_path:
+    description: File path to the pnpm lockfile, which contents hash will be used as a cache key
+    required: false
+    default: 'pnpm-lock.yaml'
+  package_json_file:
+    description: File path to the package.json to read `packageManager` and `devEngines.runtime` configuration. This path must be relative to the repository root (GITHUB_WORKSPACE).
+    required: false
+    default: 'package.json'
+outputs:
+  dest:
+    description: Expanded path of inputs#dest
+  bin_dest:
+    description: Location of `pnpm` and `pnpx` command
+  runtime:
+    description: Name of the installed runtime (`node`, `bun`, or `deno`), or empty if none was installed
+  runtime_version:
+    description: Resolved version of the installed runtime, or empty if none was installed
+runs:
+  using: node24
+  main: dist/index.js
+  post: dist/index.js
