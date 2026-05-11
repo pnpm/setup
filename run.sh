@@ -3,7 +3,8 @@
 export HOME="$(pwd)"
 export INPUT_VERSION=latest-11
 export INPUT_DEST='~/pnpm.temp'
-export INPUT_RUN_INSTALL=null
-export INPUT_RUNTIME=node
-export INPUT_RUNTIME_VERSION=lts
+export INPUT_RUNTIME='{ name: node, version: lts }'
+export INPUT_CACHE=false
+export INPUT_CACHE_DEPENDENCY_PATH=pnpm-lock.yaml
+export INPUT_PACKAGE_JSON_FILE=package.json
 exec node dist/index.js

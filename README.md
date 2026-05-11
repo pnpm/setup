@@ -2,7 +2,7 @@
 
 Install pnpm **and** a JavaScript runtime (Node.js, Bun, or Deno) in a single GitHub Actions step.
 
-The action installs pnpm from the standalone `@pnpm/exe` package (no system Node.js required) and then uses `pnpm runtime set` to install the requested runtime. The runtime binary is placed on `PATH` for subsequent steps, replacing the need for `actions/setup-node`, `oven-sh/setup-bun`, or `denoland/setup-deno`.
+The action installs pnpm from the standalone `@pnpm/exe` package (no system Node.js required) and then uses `pnpm runtime set` to install the requested runtime. The runtime binary is placed on `PATH` for subsequent steps, replacing the need for `actions/setup-node`, `oven-sh/setup-bun`, or `denoland/setup-deno`. `pnpm install` runs automatically when a `package.json` is present.
 
 If your `package.json` declares `devEngines.runtime`, the action picks up the runtime and version from there automatically — no inputs required.
 
@@ -12,21 +12,19 @@ If your `package.json` declares `devEngines.runtime`, the action picks up the ru
 |------|-------------|
 | `version` | Version of pnpm to install. Optional when `packageManager` is set in `package.json`. |
 | `dest` | Where to store pnpm files. Defaults to `~/setup-pnpm`. |
-| `runtime` | `node`, `bun`, or `deno`. Optional — defaults to `devEngines.runtime` in `package.json`. |
-| `runtime_version` | Version to install (e.g. `22`, `lts`, `latest`, `^24.4.0`). Falls back to `devEngines.runtime` version, then to `lts` (for `node`) or `latest`. |
-| `run_install` | If specified, run `pnpm install`. See [action-setup docs](https://github.com/pnpm/action-setup#run_install) for the schema. |
+| `runtime` | YAML object matching `devEngines.runtime` in `package.json` — `name` (`node` \| `bun` \| `deno`) and optional `version`. If omitted, falls back to `devEngines.runtime` in `package.json`. |
 | `cache` | Cache the pnpm store directory. Default: `false`. |
-| `cache_dependency_path` | Path(s) to the pnpm lockfile, used to compute the cache key. Default: `pnpm-lock.yaml`. |
-| `package_json_file` | Path to `package.json` (relative to `GITHUB_WORKSPACE`). Default: `package.json`. |
+| `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Default: `pnpm-lock.yaml`. |
+| `package-json-file` | Path to `package.json` (relative to `GITHUB_WORKSPACE`). Default: `package.json`. |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
 | `dest` | Expanded path of `dest`. |
-| `bin_dest` | Directory containing the `pnpm` / `pnpx` binaries. |
-| `runtime` | Name of the installed runtime, or empty string if none was installed. |
-| `runtime_version` | Resolved version of the installed runtime, or empty string if none was installed. |
+| `bin-dest` | Directory containing the `pnpm` / `pnpx` binaries. |
+| `runtime-name` | Name of the installed runtime, or empty string if none was installed. |
+| `runtime-version` | Resolved version of the installed runtime, or empty string if none was installed. |
 
 ## Usage
 
@@ -50,9 +48,10 @@ jobs:
       - uses: actions/checkout@v6
       - uses: pnpm/setup@v1
       - run: node --version
-      - run: pnpm install
       - run: pnpm test
 ```
+
+`pnpm install` runs automatically because the workspace has a `package.json`.
 
 ### Matrix: test on multiple Node versions
 
@@ -67,9 +66,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: pnpm/setup@v1
         with:
-          runtime: node
-          runtime_version: ${{ matrix.node }}
-      - run: pnpm install
+          runtime: |
+            name: node
+            version: ${{ matrix.node }}
       - run: pnpm test
 ```
 
@@ -78,13 +77,15 @@ jobs:
 ```yaml
 - uses: pnpm/setup@v1
   with:
-    runtime: bun
-    runtime_version: latest
+    runtime:
+      name: bun
+      version: latest
 
 - uses: pnpm/setup@v1
   with:
-    runtime: deno
-    runtime_version: '2'
+    runtime:
+      name: deno
+      version: '2'
 ```
 
 ### Cache the pnpm store
@@ -93,7 +94,6 @@ jobs:
 - uses: pnpm/setup@v1
   with:
     cache: true
-- run: pnpm install
 ```
 
 ## How it works
@@ -101,6 +101,7 @@ jobs:
 1. The action installs `@pnpm/exe` (a Node.js-bundled standalone build of pnpm) into `dest`, then self-updates to the requested pnpm version.
 2. `PNPM_HOME` is exported and `$PNPM_HOME/bin` is added to `PATH`.
 3. The action runs `pnpm runtime set <name> <version> -g`, which downloads the requested runtime into `$PNPM_HOME/bin` — making `node`, `bun`, or `deno` available to later workflow steps.
+4. If a `package.json` exists in the workspace, the action runs `pnpm install`.
 
 ## License
 

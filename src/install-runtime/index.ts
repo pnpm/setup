@@ -19,12 +19,13 @@ export interface RuntimeRequest {
 }
 
 export function resolveRuntimeRequest(inputs: Inputs): RuntimeRequest | undefined {
-  // Explicit `runtime` input always wins. `runtime_version` falls back to
+  // Explicit `runtime` input always wins. `runtime.version` falls back to
   // devEngines.runtime if not provided — useful for matrix workflows that
   // pick the runtime but keep the version pinned in the manifest.
   if (inputs.runtime) {
-    const version = inputs.runtimeVersion ?? readDevEngineVersion(inputs, inputs.runtime) ?? defaultVersionFor(inputs.runtime)
-    return { name: inputs.runtime, version }
+    const { name } = inputs.runtime
+    const version = inputs.runtime.version ?? readDevEngineVersion(inputs, name) ?? defaultVersionFor(name)
+    return { name, version }
   }
 
   return readFirstDevEngineRuntime(inputs)

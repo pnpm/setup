@@ -4,8 +4,8 @@ import { Inputs } from '../inputs'
 import { patchPnpmEnv } from '../utils'
 
 export function pruneStore(inputs: Inputs) {
-  if (inputs.runInstall.length === 0) {
-    console.log('Pruning is unnecessary.')
+  if (!inputs.cache) {
+    // Without caching, the store is ephemeral with the runner — no need to prune.
     return
   }
 

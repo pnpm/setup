@@ -9,8 +9,7 @@ on:
 
 jobs:
   smoke:
-    # Bootstrap install + pnpm on PATH across OSes. Mirrors the action-setup
-    # smoke test so any regression in the standalone bootstrap path is caught.
+    # Bootstrap install + pnpm on PATH across OSes.
     name: 'Smoke (${{ matrix.os }} / pnpm ${{ matrix.version }})'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -34,7 +33,7 @@ jobs:
 
       - name: 'Test: pnpm version on PATH matches request'
         env:
-          BIN_DEST: ${{ steps.pnpm.outputs.bin_dest }}
+          BIN_DEST: ${{ steps.pnpm.outputs.bin-dest }}
           REQUIRED: ${{ matrix.version }}
         run: |
           set -e
@@ -55,18 +54,18 @@ jobs:
   runtime-node:
     # Explicit runtime input across OSes. Asserts node binary is on PATH and
     # the action's outputs reflect what was installed.
-    name: 'Runtime node@${{ matrix.runtime_version }} (${{ matrix.os }})'
+    name: 'Runtime node@${{ matrix.major }} (${{ matrix.os }})'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            runtime_version: '22'
+            major: '22'
           - os: macos-latest
-            runtime_version: '22'
+            major: '22'
           - os: windows-latest
-            runtime_version: '22'
+            major: '22'
 
     steps:
       - uses: actions/checkout@v6
@@ -75,12 +74,13 @@ jobs:
         uses: ./
         with:
           version: '11.0.4'
-          runtime: node
-          runtime_version: ${{ matrix.runtime_version }}
+          runtime: |
+            name: node
+            version: '${{ matrix.major }}'
 
       - name: 'Test: node binary on PATH'
         env:
-          MAJOR: ${{ matrix.runtime_version }}
+          MAJOR: ${{ matrix.major }}
         run: |
           set -e
           which node
@@ -92,19 +92,19 @@ jobs:
           esac
         shell: bash
 
-      - name: 'Test: outputs.runtime and outputs.runtime_version'
+      - name: 'Test: outputs.runtime-name and outputs.runtime-version'
         env:
-          OUT_RUNTIME: ${{ steps.pnpm.outputs.runtime }}
-          OUT_VERSION: ${{ steps.pnpm.outputs.runtime_version }}
-          EXPECTED_VERSION: ${{ matrix.runtime_version }}
+          OUT_NAME: ${{ steps.pnpm.outputs.runtime-name }}
+          OUT_VERSION: ${{ steps.pnpm.outputs.runtime-version }}
+          EXPECTED_VERSION: ${{ matrix.major }}
         run: |
           set -e
-          if [ "${OUT_RUNTIME}" != "node" ]; then
-            echo "Expected outputs.runtime=node, got ${OUT_RUNTIME}"
+          if [ "${OUT_NAME}" != "node" ]; then
+            echo "Expected outputs.runtime-name=node, got ${OUT_NAME}"
             exit 1
           fi
           if [ "${OUT_VERSION}" != "${EXPECTED_VERSION}" ]; then
-            echo "Expected outputs.runtime_version=${EXPECTED_VERSION}, got ${OUT_VERSION}"
+            echo "Expected outputs.runtime-version=${EXPECTED_VERSION}, got ${OUT_VERSION}"
             exit 1
           fi
         shell: bash
@@ -117,8 +117,9 @@ jobs:
       - uses: ./
         with:
           version: '11.0.4'
-          runtime: bun
-          runtime_version: latest
+          runtime: |
+            name: bun
+            version: latest
       - name: 'Test: bun on PATH'
         run: |
           set -e
@@ -134,8 +135,9 @@ jobs:
       - uses: ./
         with:
           version: '11.0.4'
-          runtime: deno
-          runtime_version: '2'
+          runtime: |
+            name: deno
+            version: '2'
       - name: 'Test: deno on PATH'
         run: |
           set -e
@@ -145,7 +147,8 @@ jobs:
 
   runtime-from-devengines:
     # No `runtime` input — the action should pick up devEngines.runtime from
-    # package.json and install it.
+    # package.json and install it. Also asserts that `pnpm install` runs by
+    # default when a manifest is present.
     name: 'Runtime from devEngines.runtime'
     runs-on: ubuntu-latest
     steps:
@@ -158,6 +161,9 @@ jobs:
             "packageManager": "pnpm@11.0.4",
             "devEngines": {
               "runtime": { "name": "node", "version": "^22.0.0", "onFail": "download" }
+            },
+            "dependencies": {
+              "is-odd": "3.0.1"
             }
           }
           EOF
@@ -166,10 +172,10 @@ jobs:
       - id: pnpm
         uses: ./
 
-      - name: 'Test: node 22 is installed via devEngines.runtime'
+      - name: 'Test: node 22 is installed and dependencies are resolved'
         env:
-          OUT_RUNTIME: ${{ steps.pnpm.outputs.runtime }}
-          OUT_VERSION: ${{ steps.pnpm.outputs.runtime_version }}
+          OUT_NAME: ${{ steps.pnpm.outputs.runtime-name }}
+          OUT_VERSION: ${{ steps.pnpm.outputs.runtime-version }}
         run: |
           set -e
           which node
@@ -179,20 +185,25 @@ jobs:
             v22.*) ;;
             *) echo "Expected node v22.x, got ${actual}"; exit 1 ;;
           esac
-          if [ "${OUT_RUNTIME}" != "node" ]; then
-            echo "Expected outputs.runtime=node, got ${OUT_RUNTIME}"
+          if [ "${OUT_NAME}" != "node" ]; then
+            echo "Expected outputs.runtime-name=node, got ${OUT_NAME}"
             exit 1
           fi
           if [ "${OUT_VERSION}" != "^22.0.0" ]; then
-            echo "Expected outputs.runtime_version=^22.0.0, got ${OUT_VERSION}"
+            echo "Expected outputs.runtime-version=^22.0.0, got ${OUT_VERSION}"
+            exit 1
+          fi
+          # `pnpm install` should have run automatically — node_modules must exist.
+          if [ ! -d node_modules/is-odd ]; then
+            echo "Expected pnpm install to have populated node_modules/is-odd"
             exit 1
           fi
         shell: bash
 
   runtime-version-fallback:
-    # `runtime: node` without `runtime_version` should fall back to the version
-    # declared in devEngines.runtime.
-    name: 'runtime_version falls back to devEngines'
+    # `runtime: { name: node }` without `version` should fall back to the
+    # version declared in devEngines.runtime.
+    name: 'runtime.version falls back to devEngines'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -212,7 +223,8 @@ jobs:
       - id: pnpm
         uses: ./
         with:
-          runtime: node
+          runtime: |
+            name: node
 
       - name: 'Test: node 20 via fallback'
         run: |
@@ -226,34 +238,33 @@ jobs:
         shell: bash
 
   no-runtime:
-    # No runtime input, no devEngines.runtime. Action should install pnpm and
-    # skip the runtime step. outputs.runtime/runtime_version should be empty.
-    name: 'No runtime requested'
+    # No runtime input, no devEngines.runtime. Action installs pnpm only and
+    # leaves the runtime outputs empty. With no package.json, `pnpm install`
+    # is also skipped.
+    name: 'No runtime, no manifest'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up package.json without devEngines.runtime
-        run: echo '{"packageManager":"pnpm@11.0.4"}' > package.json
-        shell: bash
-
       - id: pnpm
         uses: ./
+        with:
+          version: '11.0.4'
 
       - name: 'Test: pnpm works, runtime outputs are empty'
         env:
-          OUT_RUNTIME: ${{ steps.pnpm.outputs.runtime }}
-          OUT_VERSION: ${{ steps.pnpm.outputs.runtime_version }}
+          OUT_NAME: ${{ steps.pnpm.outputs.runtime-name }}
+          OUT_VERSION: ${{ steps.pnpm.outputs.runtime-version }}
         run: |
           set -e
           which pnpm
           pnpm --version
-          if [ -n "${OUT_RUNTIME}" ]; then
-            echo "Expected outputs.runtime to be empty, got '${OUT_RUNTIME}'"
+          if [ -n "${OUT_NAME}" ]; then
+            echo "Expected outputs.runtime-name to be empty, got '${OUT_NAME}'"
             exit 1
           fi
           if [ -n "${OUT_VERSION}" ]; then
-            echo "Expected outputs.runtime_version to be empty, got '${OUT_VERSION}'"
+            echo "Expected outputs.runtime-version to be empty, got '${OUT_VERSION}'"
             exit 1
           fi
         shell: bash
