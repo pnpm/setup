@@ -141,8 +141,8 @@ jobs:
 
   runtime-from-devengines:
     # No `runtime` input — the action should pick up devEngines.runtime from
-    # package.json and install it. Also asserts that `pnpm install` runs by
-    # default when a manifest is present.
+    # package.json and install it. A subsequent caller-driven `pnpm install`
+    # then resolves dependencies against that runtime.
     name: 'Runtime from devEngines.runtime'
     runs-on: ubuntu-latest
     steps:
@@ -169,6 +169,10 @@ jobs:
       - id: pnpm
         uses: ./
 
+      - name: pnpm install
+        run: pnpm install
+        shell: bash
+
       - name: 'Test: node 22 is installed and dependencies are resolved'
         env:
           OUT_NAME: ${{ steps.pnpm.outputs.runtime-name }}
@@ -190,7 +194,6 @@ jobs:
             echo "Expected outputs.runtime-version=^22.0.0, got ${OUT_VERSION}"
             exit 1
           fi
-          # `pnpm install` should have run automatically — node_modules must exist.
           if [ ! -d node_modules/is-odd ]; then
             echo "Expected pnpm install to have populated node_modules/is-odd"
             exit 1
@@ -199,9 +202,10 @@ jobs:
 
   runtime-overrides-devengines:
     # Explicit `runtime` input conflicts with `devEngines.runtime` in
-    # package.json. The action should install the explicit version AND pass
-    # `--no-runtime` to pnpm install so the devEngines runtime doesn't shadow
-    # the matrix one. Requires pnpm >= 11.1.0.
+    # package.json. The action installs the explicit version. The caller is
+    # responsible for passing `--no-runtime` to `pnpm install` so the
+    # devEngines runtime doesn't shadow the explicit one. Requires pnpm
+    # >= 11.1.0.
     name: 'Explicit runtime overrides devEngines.runtime'
     runs-on: ubuntu-latest
     steps:
@@ -228,6 +232,10 @@ jobs:
         with:
           runtime: node@22
 
+      - name: pnpm install --no-runtime
+        run: pnpm install --no-runtime
+        shell: bash
+
       - name: 'Test: node 22 stays active after pnpm install'
         run: |
           set -e
@@ -237,7 +245,6 @@ jobs:
             v22.*) ;;
             *) echo "Expected node v22.x after install (--no-runtime should have suppressed the devEngines runtime fetch), got ${actual}"; exit 1 ;;
           esac
-          # pnpm install should still have run.
           if [ ! -d node_modules/is-odd ]; then
             echo "Expected pnpm install to have populated node_modules/is-odd"
             exit 1
@@ -283,8 +290,7 @@ jobs:
 
   no-runtime:
     # No runtime input, no devEngines.runtime. Action installs pnpm only and
-    # leaves the runtime outputs empty. With no package.json, `pnpm install`
-    # is also skipped.
+    # leaves the runtime outputs empty.
     name: 'No runtime, no manifest'
     runs-on: ubuntu-latest
     steps:
