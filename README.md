@@ -2,7 +2,7 @@
 
 Install pnpm **and** a JavaScript runtime (Node.js, Bun, or Deno) in a single GitHub Actions step.
 
-The action installs pnpm from the standalone `@pnpm/exe` package (no system Node.js required) and then uses `pnpm runtime set` to install the requested runtime. The runtime binary is placed on `PATH` for subsequent steps, replacing the need for `actions/setup-node`, `oven-sh/setup-bun`, or `denoland/setup-deno`. `pnpm install` runs automatically when a `package.json` is present.
+The action installs pnpm from the standalone `@pnpm/exe` package (no system Node.js required) and then uses `pnpm runtime set` to install the requested runtime. The runtime binary is placed on `PATH` for subsequent steps, replacing the need for `actions/setup-node`, `oven-sh/setup-bun`, or `denoland/setup-deno`. Like other setup actions, this one does not run `pnpm install` — add an explicit step for that.
 
 If your `package.json` declares `devEngines.runtime`, the action picks up the runtime and version from there automatically — no inputs required.
 
@@ -48,10 +48,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: pnpm/setup@v0
       - run: node --version
+      - run: pnpm install
       - run: pnpm test
 ```
-
-`pnpm install` runs automatically because the workspace has a `package.json`.
 
 ### Matrix: test on multiple Node versions
 
@@ -67,6 +66,7 @@ jobs:
       - uses: pnpm/setup@v0
         with:
           runtime: node@${{ matrix.node }}
+      - run: pnpm install
       - run: pnpm test
 ```
 
@@ -95,7 +95,7 @@ jobs:
 1. The action installs `@pnpm/exe` (a Node.js-bundled standalone build of pnpm) into `dest`, then self-updates to the requested pnpm version.
 2. `PNPM_HOME` is exported and `$PNPM_HOME/bin` is added to `PATH`.
 3. The action runs `pnpm runtime set <name> <version> -g`, which downloads the requested runtime into `$PNPM_HOME/bin` — making `node`, `bun`, or `deno` available to later workflow steps.
-4. If a `package.json` exists in the workspace, the action runs `pnpm install`. When the `runtime` input is set, `--no-runtime` is appended so the just-installed runtime isn't shadowed by a different version declared in `devEngines.runtime`. This flag requires pnpm ≥ 11.1.0.
+4. Running `pnpm install` is left to the caller.
 
 ## License
 

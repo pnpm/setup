@@ -5,7 +5,6 @@ import getInputs, { Inputs } from './inputs'
 import installPnpm from './install-pnpm'
 import { resolveRuntimeRequest, installRuntime, InstalledRuntime, logSkippedRuntime } from './install-runtime'
 import setOutputs from './outputs'
-import pnpmInstall from './pnpm-install'
 import pruneStore from './pnpm-store-prune'
 
 async function main() {
@@ -37,8 +36,6 @@ async function runMain() {
   setOutputs(inputs, result.binDest, runtime)
 
   await restoreCache(inputs)
-
-  pnpmInstall(inputs)
 }
 
 async function runPost() {
