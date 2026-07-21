@@ -32,7 +32,7 @@ export async function runRestoreCache(inputs: Inputs) {
 }
 
 async function getCacheDirectory() {
-  const { stdout } = await getExecOutput('pnpm store path --silent')
+  const { stdout } = await getExecOutput('pnpm store path')
   const cacheFolderPath = stdout.trim()
   debug(`Cache folder is set to "${cacheFolderPath}"`)
   return cacheFolderPath

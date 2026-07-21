@@ -1,17 +1,14 @@
-import { addPath, exportVariable } from '@actions/core'
+import { addPath, exportVariable, info } from '@actions/core'
 import { spawn } from 'child_process'
-import { rm, writeFile, mkdir, symlink } from 'fs/promises'
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync } from 'fs'
+import { mkdir, rm } from 'fs/promises'
 import path from 'path'
 import util from 'util'
-import { Inputs } from '../inputs'
 import { parse as parseYaml } from 'yaml'
-import exeLock from './bootstrap/exe-lock.json'
-
-const BOOTSTRAP_EXE_PACKAGE_JSON = JSON.stringify({ private: true, dependencies: { '@pnpm/exe': exeLock.packages['node_modules/@pnpm/exe'].version } })
+import { Inputs } from '../inputs'
+import { downloadPnpm, resolvePnpm } from './download'
 
 export interface SelfInstallerResult {
-  exitCode: number
   binDest: string
   pnpmHome: string
 }
@@ -19,80 +16,32 @@ export interface SelfInstallerResult {
 export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerResult> {
   const { version, dest, packageJsonFile } = inputs
 
-  // Install bootstrap @pnpm/exe via npm (integrity verified by committed lockfile).
-  // @pnpm/exe bundles Node.js, so the action never depends on a system Node for
-  // the user's runtime — once installed, the pnpm binary can install node/bun/deno
-  // via `pnpm runtime set`.
+  const spec = readTargetVersion({ version, packageJsonFile })
+  const resolved = await resolvePnpm(spec)
+  info(`Downloading pnpm ${resolved.version} from ${resolved.tarballUrl}`)
+
   await rm(dest, { recursive: true, force: true })
-  await mkdir(dest, { recursive: true })
+  // dest/bin must exist upfront: `pnpm runtime set -g` refuses to run when
+  // the global bin directory is missing.
+  await mkdir(path.join(dest, 'bin'), { recursive: true })
+  const pnpmBin = await downloadPnpm(resolved, dest)
 
-  await writeFile(path.join(dest, 'package.json'), BOOTSTRAP_EXE_PACKAGE_JSON)
-  await writeFile(path.join(dest, 'package-lock.json'), JSON.stringify(exeLock))
-
-  // Append the action's node directory to PATH so npm's
-  // `#!/usr/bin/env node` shebang resolves on runners (e.g. GHE
-  // self-hosted) where node isn't already on PATH. Append (not
-  // prepend) so a user-installed toolchain on PATH — e.g. from a
-  // prior `setup-node` step — keeps precedence; otherwise the
-  // runner-bundled node would shadow it and pair the user's npm
-  // with a mismatched node version. npm itself is resolved via
-  // PATH — on the GitHub Actions runner it is not co-located with
-  // `process.execPath`.
-  const nodeDir = path.dirname(process.execPath)
-  // On Windows, the PATH key casing varies; search case-insensitively.
-  const pathKey = Object.keys(process.env).find(k => k.toUpperCase() === 'PATH') ?? 'PATH'
-  const currentPath = process.env[pathKey]
-  const npmEnv = { ...process.env, [pathKey]: currentPath ? currentPath + path.delimiter + nodeDir : nodeDir }
-  const npmExitCode = await runCommand('npm', ['ci'], { cwd: dest, env: npmEnv })
-  if (npmExitCode !== 0) {
-    const binDest = path.join(dest, 'node_modules', '.bin')
-    return { exitCode: npmExitCode, binDest, pnpmHome: binDest }
+  // Sanity check — catches a binary that can't run on this system (e.g. a
+  // glibc build on a musl-only distro) with a clear error.
+  const actualVersion = await readVersion(pnpmBin)
+  if (actualVersion !== resolved.version) {
+    throw new Error(`The installed pnpm reports version ${actualVersion}, expected ${resolved.version}`)
   }
 
-  // On Windows, npm's .bin shims can't properly execute the extensionless
-  // @pnpm/exe native binaries. Add the @pnpm/exe directory directly to PATH
-  // so pnpm.exe is found natively.
-  const pnpmHome = process.platform === 'win32'
-    ? path.join(dest, 'node_modules', '@pnpm', 'exe')
-    : path.join(dest, 'node_modules', '.bin')
-  // PNPM_HOME/bin is where `pnpm self-update` places the target version
-  // binary and where `pnpm runtime set` installs runtime binaries. It must
-  // have higher PATH precedence than pnpmHome (which contains the bootstrap
-  // pnpm) so the self-updated pnpm and the runtime are found first.
-  addPath(pnpmHome)
-  addPath(path.join(pnpmHome, 'bin'))
-  exportVariable('PNPM_HOME', pnpmHome)
+  // dest doubles as PNPM_HOME: `pnpm runtime set -g` installs runtime
+  // binaries into $PNPM_HOME/bin and `pnpm self-update` places its shims
+  // there. dest/bin is added after dest so it gets higher PATH precedence —
+  // a self-updated pnpm must win over the executable this action installed.
+  addPath(dest)
+  addPath(path.join(dest, 'bin'))
+  exportVariable('PNPM_HOME', dest)
 
-  // Ensure pnpm bin link exists — npm ci sometimes doesn't create it
-  if (process.platform !== 'win32') {
-    const pnpmBinLink = path.join(dest, 'node_modules', '.bin', 'pnpm')
-    if (!existsSync(pnpmBinLink)) {
-      await mkdir(path.join(dest, 'node_modules', '.bin'), { recursive: true })
-      await symlink(path.join('..', '@pnpm', 'exe', 'pnpm'), pnpmBinLink)
-    }
-  }
-
-  const bootstrapPnpm = path.join(dest, 'node_modules', '@pnpm', 'exe', process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
-
-  // Self-update the bootstrap to the requested pnpm version. readTargetVersion
-  // either returns a value or throws, so this always runs.
-  const targetVersion = readTargetVersion({ version, packageJsonFile })
-  const exitCode = await runCommand(bootstrapPnpm, ['self-update', targetVersion], { cwd: dest })
-  if (exitCode !== 0) {
-    return { exitCode, binDest: pnpmHome, pnpmHome }
-  }
-  // self-update writes the target pnpm/pnpx into PNPM_HOME/bin, leaving the
-  // bootstrap symlinks in pnpmHome pointing at the old version. Use
-  // PNPM_HOME/bin so consumers of the bin_dest output invoke the requested
-  // version. When the requested version resolves to the bootstrap version,
-  // self-update is a no-op and PNPM_HOME/bin is not created — fall back to
-  // pnpmHome.
-  const updatedBinDir = path.join(pnpmHome, 'bin')
-  return {
-    exitCode: 0,
-    binDest: existsSync(updatedBinDir) ? updatedBinDir : pnpmHome,
-    pnpmHome,
-  }
+  return { binDest: dest, pnpmHome: dest }
 }
 
 function readTargetVersion(opts: {
@@ -120,7 +69,7 @@ function readTargetVersion(opts: {
   }
 
   // packageManager is always exact `pnpm@<version>[+<integrity>]` per spec.
-  // Strip the integrity hash for self-update.
+  // Strip the integrity hash before resolving.
   const packageManagerVersion =
     typeof packageManager === 'string' && packageManager.startsWith('pnpm@')
       ? packageManager.slice('pnpm@'.length).split('+')[0]
@@ -138,8 +87,8 @@ Remove one of these versions to avoid version mismatch errors like ERR_PNPM_BAD_
   }
 
   // devEngines.packageManager takes priority over packageManager, matching
-  // pnpm's getWantedPackageManager logic. `pnpm self-update` accepts both
-  // exact versions and semver ranges, so we pass either through directly.
+  // pnpm's getWantedPackageManager logic. Both exact versions and semver
+  // ranges are accepted.
   if (devEngines?.packageManager?.name === 'pnpm' && devEngines.packageManager.version) {
     return devEngines.packageManager.version
   }
@@ -162,16 +111,19 @@ Please specify it by one of the following ways:
   - in the package.json with the key "devEngines.packageManager"`)
 }
 
-function runCommand(cmd: string, args: string[], opts: { cwd: string; env?: Record<string, string | undefined> }): Promise<number> {
-  return new Promise<number>((resolve, reject) => {
-    const cp = spawn(cmd, args, {
-      cwd: opts.cwd,
-      env: opts.env,
-      stdio: ['pipe', 'inherit', 'inherit'],
-      shell: process.platform === 'win32',
-    })
+function readVersion(pnpmBin: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const cp = spawn(pnpmBin, ['--version'], { stdio: ['ignore', 'pipe', 'inherit'] })
+    let output = ''
+    cp.stdout.on('data', (chunk) => { output += chunk })
     cp.on('error', reject)
-    cp.on('close', resolve)
+    cp.on('close', (code) => {
+      if (code === 0) {
+        resolve(output.trim())
+      } else {
+        reject(new Error(`"${pnpmBin} --version" exited with code ${code}`))
+      }
+    })
   })
 }
 

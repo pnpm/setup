@@ -22,7 +22,6 @@ async function runMain() {
   saveState('is_post', 'true')
 
   const result = await installPnpm(inputs)
-  if (result === undefined) return
   console.log('Installation Completed!')
 
   let runtime: InstalledRuntime | undefined

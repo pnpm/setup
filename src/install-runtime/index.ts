@@ -102,16 +102,10 @@ function readFirstDevEngineRuntime(inputs: Inputs): RuntimeRequest | undefined {
 }
 
 function runPnpm(binDest: string, args: string[]): Promise<number> {
-  // No extension: on Windows, `pnpm self-update` may land the binary as
-  // `pnpm.exe`, `pnpm.cmd`, or extensionless `pnpm` depending on the version
-  // and the shim mechanism. With `shell: true`, cmd.exe resolves via PATHEXT
-  // and finds whichever variant is present. On POSIX the file is always
-  // named `pnpm` and shell is off, so the absolute path works directly.
-  const pnpmBin = path.join(binDest, 'pnpm')
+  const pnpmBin = path.join(binDest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
   return new Promise<number>((resolve, reject) => {
     const cp = spawn(pnpmBin, args, {
       stdio: ['pipe', 'inherit', 'inherit'],
-      shell: process.platform === 'win32',
     })
     cp.on('error', reject)
     cp.on('close', resolve)
