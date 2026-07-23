@@ -21,8 +21,9 @@ export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerRes
   info(`Downloading pnpm ${resolved.version} from ${resolved.tarballUrl}`)
 
   await rm(dest, { recursive: true, force: true })
-  // dest/bin must exist upfront: `pnpm runtime set -g` refuses to run when
-  // the global bin directory is missing.
+  // Create dest/bin upfront: pnpm ≤ 12.0.0-alpha.17 refuses to run
+  // `pnpm runtime set -g` when the global bin directory is missing
+  // (fixed in alpha.18, but users may pin older versions).
   await mkdir(path.join(dest, 'bin'), { recursive: true })
   const pnpmBin = await downloadPnpm(resolved, dest)
 

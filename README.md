@@ -37,7 +37,7 @@ If your `package.json` declares `devEngines.runtime`, the action picks up the ru
 ```json
 // package.json
 {
-  "packageManager": "pnpm@12.0.0-alpha.17",
+  "packageManager": "pnpm@12.0.0-alpha.18",
   "devEngines": {
     "runtime": { "name": "node", "version": "^22.0.0", "onFail": "download" }
   }
