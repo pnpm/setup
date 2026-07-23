@@ -7,6 +7,9 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   smoke:
     # Direct binary download + pnpm on PATH across OSes and architectures.

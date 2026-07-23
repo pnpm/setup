@@ -34,7 +34,7 @@ export async function resolvePnpm(spec: string): Promise<ResolvedPnpm> {
   const platform = getPlatformKey()
   const exePackage = `@pnpm/exe.${platform}`
   const packument = await fetchJson<AbbreviatedPackument>(
-    `${REGISTRY}/${exePackage.replace('/', '%2f')}`,
+    `${REGISTRY}/${exePackage.replaceAll('/', '%2f')}`,
     { accept: ABBREVIATED_PACKUMENT },
   )
 
@@ -73,9 +73,10 @@ export async function downloadPnpm(resolved: ResolvedPnpm, destDir: string): Pro
   }
   await pipeline(response.message, createWriteStream(tarball))
   await verifyIntegrity(tarball, resolved.integrity, resolved.tarballUrl)
-  await extractTarball(tarball, tmpDir)
 
   const exe = process.platform === 'win32' ? 'pnpm.exe' : 'pnpm'
+  await extractTarball(tarball, tmpDir, `package/${exe}`)
+
   const pnpmBin = path.join(destDir, exe)
   await rename(path.join(tmpDir, 'package', exe), pnpmBin)
   if (process.platform !== 'win32') {
@@ -160,19 +161,25 @@ async function verifyIntegrity(file: string, expected: string, url: string): Pro
   }
 }
 
-function extractTarball(tarball: string, destDir: string): Promise<void> {
+function extractTarball(tarball: string, destDir: string, entry: string): Promise<void> {
   // A tar executable is available on all GitHub-hosted runners, including
-  // Windows (bsdtar ships with Windows since 2019). Backslashes are converted
-  // to forward slashes because MSYS-based tar implementations misread them.
-  const args = ['-xzf', tarball.replace(/\\/g, '/'), '-C', destDir.replace(/\\/g, '/')]
+  // Windows (bsdtar ships with Windows since 2019). Only the pnpm binary
+  // entry is extracted — the archive holds nothing else the action needs.
+  // Backslashes are converted to forward slashes because MSYS-based tar
+  // implementations misread them.
+  const args = ['-xzf', tarball.replace(/\\/g, '/'), '-C', destDir.replace(/\\/g, '/'), entry]
   return new Promise<void>((resolve, reject) => {
     const cp = spawn('tar', args, { stdio: ['ignore', 'inherit', 'inherit'] })
-    cp.on('error', reject)
+    cp.on('error', (error: NodeJS.ErrnoException) => {
+      reject(error.code === 'ENOENT'
+        ? new Error('Could not find a `tar` executable on PATH. tar is preinstalled on all GitHub-hosted runners; on a self-hosted runner, install tar to use this action.')
+        : error)
+    })
     cp.on('close', (code) => {
       if (code === 0) {
         resolve()
       } else {
-        reject(new Error(`tar exited with code ${code} while extracting ${tarball}`))
+        reject(new Error(`tar exited with code ${code} while extracting ${entry} from ${tarball}`))
       }
     })
   })
