@@ -7,10 +7,11 @@ import path from 'path'
 import { pipeline } from 'stream/promises'
 import semver from 'semver'
 
-// Since v12 pnpm is a standalone native executable, published per platform as
-// `@pnpm/exe.<os>-<arch>`. Earlier versions are Node.js programs that this
-// action cannot install.
-const MIN_SUPPORTED_MAJOR = 12
+// This action downloads pnpm's native, per-platform executable and uses
+// `pnpm runtime` to install a JavaScript runtime. Both are available from
+// v11 onward, so that is the oldest major this action can install. The
+// per-platform package name differs by major (see `exePackageName`).
+const MIN_SUPPORTED_MAJOR = 11
 
 const REGISTRY = 'https://registry.npmjs.org'
 // Abbreviated packuments are much smaller than full ones and still carry the
@@ -31,23 +32,28 @@ interface AbbreviatedPackument {
 const http = new HttpClient('pnpm/setup', undefined, { allowRetries: true, maxRetries: 3 })
 
 export async function resolvePnpm(spec: string): Promise<ResolvedPnpm> {
-  const platform = getPlatformKey()
-  const exePackage = `@pnpm/exe.${platform}`
+  // Resolve the version first: the executable's package name depends on the
+  // major (v11 and v12+ use different naming), so the major must be known
+  // before the right per-platform package can be queried.
+  const version = await resolveVersion(spec)
+  const major = semver.major(version)
+  if (major < MIN_SUPPORTED_MAJOR) {
+    throw new Error(`The requested pnpm version "${spec}" resolved to ${version}, but this action only installs pnpm v${MIN_SUPPORTED_MAJOR} or newer.
+This action downloads pnpm's native per-platform executable and uses \`pnpm runtime\` to install a JavaScript runtime; both are available from v${MIN_SUPPORTED_MAJOR} onward.
+To install older pnpm, use the pnpm/action-setup action instead.`)
+  }
+
+  const platform = getPlatform()
+  const exePackage = exePackageName(platform, major)
   const packument = await fetchJson<AbbreviatedPackument>(
     `${REGISTRY}/${exePackage.replaceAll('/', '%2f')}`,
     { accept: ABBREVIATED_PACKUMENT },
   )
 
-  const version = await resolveVersion(spec, Object.keys(packument.versions))
-  if (semver.major(version) < MIN_SUPPORTED_MAJOR) {
-    throw new Error(`The requested pnpm version "${spec}" resolved to ${version}, but this action only installs pnpm v12 or newer.
-Since v12, pnpm is a standalone executable that needs no Node.js or npm; this action does not support the Node.js-based pnpm versions.
-To install pnpm 11 or older, use the pnpm/action-setup action instead.`)
-  }
-
   const entry = packument.versions[version]
   if (!entry) {
-    throw new Error(`pnpm ${version} has no standalone executable published for ${platform} (${exePackage}).`)
+    throw new Error(`pnpm ${version} has no native executable published for your platform (${exePackage}). `
+      + `Note that pnpm v11 ships no native binary for Intel macOS (darwin-x64); use v12 or newer there.`)
   }
   const { tarball, integrity } = entry.dist
   if (!integrity?.startsWith('sha512-')) {
@@ -96,18 +102,41 @@ export async function downloadPnpm(resolved: ResolvedPnpm, destDir: string): Pro
   return pnpmBin
 }
 
-function getPlatformKey(): string {
+interface Platform {
+  readonly os: 'linux' | 'darwin' | 'win32'
+  readonly arch: 'x64' | 'arm64'
+  readonly musl: boolean
+}
+
+function getPlatform(): Platform {
   const arch = process.arch
   if (arch !== 'x64' && arch !== 'arm64') {
     throw new Error(`Unsupported CPU architecture "${arch}". pnpm provides executables for x64 and arm64.`)
   }
-  switch (process.platform) {
-    case 'win32': return `win32-${arch}`
-    case 'darwin': return `darwin-${arch}`
-    case 'linux': return `linux-${arch}${isMusl() ? '-musl' : ''}`
-    default:
-      throw new Error(`Unsupported platform "${process.platform}". pnpm provides executables for Windows, macOS, and Linux.`)
+  const os = process.platform
+  if (os !== 'linux' && os !== 'darwin' && os !== 'win32') {
+    throw new Error(`Unsupported platform "${os}". pnpm provides executables for Windows, macOS, and Linux.`)
   }
+  return { os, arch, musl: os === 'linux' && isMusl() }
+}
+
+// The per-platform executable is published under two different naming schemes:
+//   • v12+  →  `@pnpm/exe.<os>-<arch>`, with a `-musl` suffix on Linux
+//             (e.g. `@pnpm/exe.linux-x64`, `@pnpm/exe.linux-x64-musl`,
+//              `@pnpm/exe.darwin-arm64`, `@pnpm/exe.win32-x64`).
+//   • v11   →  `@pnpm/<os>-<arch>` with `macos`/`win` names and a dedicated
+//             `linuxstatic-<arch>` package for the musl build
+//             (e.g. `@pnpm/linux-x64`, `@pnpm/linuxstatic-x64`,
+//              `@pnpm/macos-arm64`, `@pnpm/win-x64`).
+// Both tarballs share the same internal layout (`package/pnpm[.exe]`), so only
+// the package name differs. Note: v11 ships no `@pnpm/macos-x64` (Intel macOS).
+function exePackageName(platform: Platform, major: number): string {
+  const { os, arch, musl } = platform
+  if (major >= 12) {
+    return `@pnpm/exe.${os}-${arch}${musl ? '-musl' : ''}`
+  }
+  const osName = os === 'win32' ? 'win' : os === 'darwin' ? 'macos' : (musl ? 'linuxstatic' : 'linux')
+  return `@pnpm/${osName}-${arch}`
 }
 
 function isMusl(): boolean {
@@ -116,17 +145,21 @@ function isMusl(): boolean {
   return existsSync('/etc/alpine-release')
 }
 
-async function resolveVersion(spec: string, available: string[]): Promise<string> {
+async function resolveVersion(spec: string): Promise<string> {
   const exact = semver.valid(spec)
   if (exact) return exact
 
   if (semver.validRange(spec)) {
-    // Prefer stable releases; fall back to prereleases so ranges like `12` or
-    // `^12.0.0` resolve while v12 has only prerelease versions published.
+    // Resolve ranges against the authoritative `pnpm` packument, which lists
+    // every published version across all majors — the per-platform executable
+    // packages only cover a single naming scheme. Prefer stable releases; fall
+    // back to prereleases so ranges like `12` or `^12.0.0` resolve while v12
+    // has only prerelease versions published.
+    const available = await fetchPnpmVersions()
     const resolved = semver.maxSatisfying(available, spec)
       ?? semver.maxSatisfying(available, spec, { includePrerelease: true })
     if (!resolved) {
-      throw new Error(`No pnpm executable version matches "${spec}". Published versions: ${available.join(', ')}`)
+      throw new Error(`No pnpm version matches "${spec}".`)
     }
     return resolved
   }
@@ -140,6 +173,14 @@ async function resolveVersion(spec: string, available: string[]): Promise<string
     throw new Error(`"${spec}" is neither a valid pnpm version, a semver range, nor a known dist-tag of pnpm.`)
   }
   return version
+}
+
+async function fetchPnpmVersions(): Promise<string[]> {
+  const packument = await fetchJson<AbbreviatedPackument>(
+    `${REGISTRY}/pnpm`,
+    { accept: ABBREVIATED_PACKUMENT },
+  )
+  return Object.keys(packument.versions)
 }
 
 async function fetchJson<T>(url: string, headers?: Record<string, string>): Promise<T> {
