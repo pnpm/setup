@@ -155,7 +155,16 @@ async function fetchRelease(version: string, token?: string): Promise<GitHubRele
   // A token lifts the anonymous 60-req/hour rate limit; the action defaults it
   // to the workflow's GITHUB_TOKEN. Anonymous requests still work without one.
   if (token) headers.authorization = `Bearer ${token}`
-  return fetchJson<GitHubRelease>(`${GITHUB_API}/repos/pnpm/pnpm/releases/tags/v${version}`, headers)
+
+  const url = `${GITHUB_API}/repos/pnpm/pnpm/releases/tags/v${version}`
+  const response = await http.getJson<GitHubRelease>(url, headers)
+  if (response.statusCode === 404) {
+    throw new Error(`pnpm ${version} has no GitHub release (tag v${version}). Some prerelease versions are published to npm but not released as downloadable binaries — pick a version with a published release: https://github.com/pnpm/pnpm/releases`)
+  }
+  if (response.result == null) {
+    throw new Error(`Unexpected empty response from ${url} (HTTP ${response.statusCode}).`)
+  }
+  return response.result
 }
 
 async function resolveVersion(spec: string): Promise<string> {
