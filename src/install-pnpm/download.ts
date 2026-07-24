@@ -57,7 +57,7 @@ To install older pnpm, use the pnpm/action-setup action instead.`)
   const release = await fetchRelease(version, token)
   const found = release.assets.find((a) => a.name === asset)
   if (!found) {
-    const isIntelMac = platform.os === 'darwin' && platform.arch === 'x64'
+    const isIntelMac = semver.major(version) === 11 && platform.os === 'darwin' && platform.arch === 'x64'
     throw new Error(`pnpm ${version} has no ${asset} release asset for your platform. `
       + (isIntelMac
         ? 'pnpm v11 ships no binary for Intel macOS (darwin-x64); use v12 or newer there.'
