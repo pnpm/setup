@@ -18,6 +18,7 @@ export interface Inputs {
   readonly packageJsonFile: string
   readonly runtime?: RuntimeInput
   readonly install: boolean
+  readonly token?: string
 }
 
 const options: InputOptions = {
@@ -58,6 +59,7 @@ export const getInputs = (): Inputs => ({
   packageJsonFile: parseInputPath('package-json-file'),
   runtime: parseRuntime(),
   install: getBooleanInput('install'),
+  token: getInput('token') || undefined,
 })
 
 export default getInputs

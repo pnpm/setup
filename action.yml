@@ -59,6 +59,13 @@ inputs:
       need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration).
     required: false
     default: 'true'
+  token:
+    description: |
+      GitHub token used to look up the pnpm release (and its asset checksum)
+      via the GitHub API. Defaults to the workflow's automatic token, which
+      lifts the low anonymous API rate limit. Rarely needs to be set.
+    required: false
+    default: ${{ github.token }}
 outputs:
   dest:
     description: Expanded path of inputs#dest
