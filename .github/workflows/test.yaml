@@ -56,6 +56,105 @@ jobs:
           fi
         shell: bash
 
+  smoke-v11:
+    # pnpm v11 publishes its native per-platform executable under a different
+    # package name than v12+ (`@pnpm/<os>-<arch>` vs `@pnpm/exe.<os>-<arch>`).
+    # Verify the action downloads it and puts pnpm on PATH across OSes/arches.
+    # (macos-latest is arm64; pnpm v11 ships no Intel-macOS binary, so no
+    # macos-13 entry here.)
+    name: 'Smoke pnpm 11 (${{ matrix.os }})'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: pnpm
+        uses: ./
+        with:
+          version: '11.17.0'
+          install: false
+
+      - name: 'Test: pnpm 11 on PATH matches request'
+        env:
+          BIN_DEST: ${{ steps.pnpm.outputs.bin-dest }}
+        run: |
+          set -e
+          which pnpm
+          actual="$(pnpm --version)"
+          echo "pnpm --version: ${actual}"
+          if [ "${actual}" != "11.17.0" ]; then
+            echo "Expected pnpm 11.17.0, got ${actual}"
+            exit 1
+          fi
+          bin_dest_version="$("$BIN_DEST/pnpm" --version)"
+          if [ "${bin_dest_version}" != "11.17.0" ]; then
+            echo "Expected 11.17.0 via bin_dest, got ${bin_dest_version}"
+            exit 1
+          fi
+        shell: bash
+
+  runtime-node-pnpm11:
+    # The whole premise of supporting v11 is that `pnpm runtime` works there.
+    # Install pnpm v11, install a runtime through it, and run `pnpm install`.
+    name: 'Runtime node + install on pnpm 11'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up a synthetic package.json
+        # Use a fresh manifest (and drop the repo lockfile) so `pnpm install`
+        # under v11 resolves cleanly rather than against a v12-authored lockfile.
+        run: |
+          rm -f pnpm-lock.yaml
+          cat > package.json <<'EOF'
+          {
+            "dependencies": {
+              "is-odd": "3.0.1"
+            }
+          }
+          EOF
+        shell: bash
+
+      - id: pnpm
+        uses: ./
+        with:
+          version: '11.17.0'
+          runtime: node@22
+
+      - name: 'Test: pnpm 11, node 22, and install all worked'
+        env:
+          OUT_NAME: ${{ steps.pnpm.outputs.runtime-name }}
+          OUT_VERSION: ${{ steps.pnpm.outputs.runtime-version }}
+        run: |
+          set -e
+          pnpm_version="$(pnpm --version)"
+          echo "pnpm --version: ${pnpm_version}"
+          case "${pnpm_version}" in
+            11.*) ;;
+            *) echo "Expected pnpm 11.x, got ${pnpm_version}"; exit 1 ;;
+          esac
+          which node
+          node_version="$(node --version)"
+          echo "node --version: ${node_version}"
+          case "${node_version}" in
+            v22.*) ;;
+            *) echo "Expected node v22.x, got ${node_version}"; exit 1 ;;
+          esac
+          if [ "${OUT_NAME}" != "node" ]; then
+            echo "Expected outputs.runtime-name=node, got ${OUT_NAME}"; exit 1
+          fi
+          if [ "${OUT_VERSION}" != "22" ]; then
+            echo "Expected outputs.runtime-version=22, got ${OUT_VERSION}"; exit 1
+          fi
+          if [ ! -d node_modules/is-odd ]; then
+            echo "Expected pnpm install to populate node_modules/is-odd"; exit 1
+          fi
+        shell: bash
+
   version-from-dist-tag:
     # `version` may be an npm dist-tag; it is resolved against the main
     # `pnpm` package's dist-tags.
