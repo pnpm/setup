@@ -57,8 +57,11 @@ To install older pnpm, use the pnpm/action-setup action instead.`)
   const release = await fetchRelease(version, token)
   const found = release.assets.find((a) => a.name === asset)
   if (!found) {
+    const isIntelMac = platform.os === 'darwin' && platform.arch === 'x64'
     throw new Error(`pnpm ${version} has no ${asset} release asset for your platform. `
-      + `Note that pnpm v11 ships no binary for Intel macOS (darwin-x64); use v12 or newer there.`)
+      + (isIntelMac
+        ? 'pnpm v11 ships no binary for Intel macOS (darwin-x64); use v12 or newer there.'
+        : `See https://github.com/pnpm/pnpm/releases/tag/v${version} for the available assets.`))
   }
   if (!found.digest?.startsWith('sha256:')) {
     throw new Error(`Release asset ${asset} for pnpm ${version} has no sha256 digest (got ${found.digest ?? '<missing>'}).`)
@@ -161,8 +164,11 @@ async function fetchRelease(version: string, token?: string): Promise<GitHubRele
   if (response.statusCode === 404) {
     throw new Error(`pnpm ${version} has no GitHub release (tag v${version}). Some prerelease versions are published to npm but not released as downloadable binaries — pick a version with a published release: https://github.com/pnpm/pnpm/releases`)
   }
-  if (response.result == null) {
-    throw new Error(`Unexpected empty response from ${url} (HTTP ${response.statusCode}).`)
+  // Any other non-200 (403 rate limit, 401 bad token, 5xx, …) still yields a
+  // parsed JSON error body as `result`; reject on status so it never reaches
+  // the caller as a bogus release.
+  if (response.statusCode !== 200 || response.result == null) {
+    throw new Error(`Failed to fetch the pnpm ${version} release from ${url}: HTTP ${response.statusCode}.`)
   }
   return response.result
 }
