@@ -18,6 +18,7 @@ const REGISTRY = 'https://registry.npmjs.org'
 const ABBREVIATED_PACKUMENT = 'application/vnd.npm.install-v1+json'
 
 const GITHUB_API = 'https://api.github.com'
+const DOWNLOAD_MAX_RETRIES = 3
 
 export interface ResolvedPnpm {
   readonly version: string
@@ -87,12 +88,7 @@ export async function downloadPnpm(resolved: ResolvedPnpm, destDir: string): Pro
   await mkdir(tmpDir, { recursive: true })
 
   const archivePath = path.join(tmpDir, resolved.archive === 'zip' ? 'pnpm.zip' : 'pnpm.tgz')
-  const response = await http.get(resolved.downloadUrl)
-  if (response.message.statusCode !== 200) {
-    response.message.resume()
-    throw new Error(`Failed to download ${resolved.downloadUrl}: HTTP ${response.message.statusCode}`)
-  }
-  await pipeline(response.message, createWriteStream(archivePath))
+  await downloadWithRetry(resolved.downloadUrl, archivePath)
   await verifySha256(archivePath, resolved.sha256, resolved.downloadUrl)
 
   await extractArchive(archivePath, destDir, resolved.archive)
@@ -115,6 +111,33 @@ export async function downloadPnpm(resolved: ResolvedPnpm, destDir: string): Pro
   }
 
   return pnpmBin
+}
+
+async function downloadWithRetry(url: string, archivePath: string): Promise<void> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= DOWNLOAD_MAX_RETRIES; attempt++) {
+    try {
+      const response = await http.get(url)
+      if (response.message.statusCode !== 200) {
+        response.message.resume()
+        throw new Error(`Failed to download ${url}: HTTP ${response.message.statusCode}`)
+      }
+      await pipeline(response.message, createWriteStream(archivePath))
+      return
+    } catch (error: unknown) {
+      lastError = error
+      if (!isRetryableDownloadError(error) || attempt === DOWNLOAD_MAX_RETRIES) {
+        throw error
+      }
+    }
+  }
+  throw lastError
+}
+
+function isRetryableDownloadError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const errno = (error as NodeJS.ErrnoException).code
+  return errno === 'ECONNRESET' || errno === 'ETIMEDOUT' || errno === 'EPIPE'
 }
 
 interface Platform {
