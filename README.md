@@ -5,7 +5,7 @@ Install pnpm **and** a JavaScript runtime (Node.js, Bun, or Deno) in a single Gi
 pnpm ships a self-contained release binary — the action downloads it for the runner's platform directly from pnpm's GitHub releases (no Node.js or npm needed) and then uses `pnpm runtime set` to install the requested runtime. The runtime binary is placed on `PATH` for subsequent steps, replacing the need for `actions/setup-node`, `oven-sh/setup-bun`, or `denoland/setup-deno`. `pnpm install` runs automatically when a `package.json` is present.
 
 > [!NOTE]
-> This action installs pnpm v11 and newer only — it relies on pnpm's self-contained release binaries and the `pnpm runtime` command, both available from v11. To install pnpm 10 or older, use [`pnpm/action-setup`](https://github.com/pnpm/action-setup) instead.
+> `pnpm/setup@v2` installs pnpm v11 and newer only — it relies on pnpm's self-contained release binaries and the `pnpm runtime` command, both available from v11. `v1` installed pnpm through npm and could set up pnpm 10; if you need pnpm 10 or older, use [`pnpm/action-setup`](https://github.com/pnpm/action-setup) instead.
 >
 > One caveat: pnpm v11 publishes no binary for Intel macOS (`darwin-x64`); use v12 or newer on Intel macOS runners.
 
@@ -53,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/setup@v1
+      - uses: pnpm/setup@v2
       - run: node --version
       - run: pnpm test
 ```
@@ -71,7 +71,7 @@ jobs:
         node: [20, 22, 24]
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/setup@v1
+      - uses: pnpm/setup@v2
         with:
           runtime: node@${{ matrix.node }}
       - run: pnpm test
@@ -80,11 +80,11 @@ jobs:
 ### Install Bun or Deno
 
 ```yaml
-- uses: pnpm/setup@v1
+- uses: pnpm/setup@v2
   with:
     runtime: bun@latest
 
-- uses: pnpm/setup@v1
+- uses: pnpm/setup@v2
   with:
     runtime: deno@2
 ```
@@ -92,7 +92,7 @@ jobs:
 ### Cache the pnpm store
 
 ```yaml
-- uses: pnpm/setup@v1
+- uses: pnpm/setup@v2
   with:
     cache: true
 ```
@@ -102,7 +102,7 @@ jobs:
 For jobs that only need pnpm itself — e.g. `pnpm audit`, lockfile-only regeneration — set `install: false`:
 
 ```yaml
-- uses: pnpm/setup@v1
+- uses: pnpm/setup@v2
   with:
     install: false
 - run: pnpm audit
