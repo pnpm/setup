@@ -52,7 +52,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/setup@v2
       - run: node --version
       - run: pnpm test
@@ -68,9 +68,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [20, 22, 24]
+        node: [22, 24, 26]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/setup@v2
         with:
           runtime: node@${{ matrix.node }}
