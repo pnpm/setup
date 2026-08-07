@@ -104,6 +104,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Configure store at the drive root
         run: Set-Content -Path .npmrc -Value 'store-dir=/.pnpm-store'
