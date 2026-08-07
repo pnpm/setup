@@ -96,6 +96,32 @@ jobs:
           fi
         shell: bash
 
+  cache-windows:
+    # pnpm can report a Windows store path with the extended-length `\\?\`
+    # prefix. Cache paths must use the regular drive-path form because the
+    # cache toolkit otherwise interprets `?` as a glob in the root segment.
+    name: 'Cache Windows extended-length store path'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure store at the drive root
+        run: Set-Content -Path .npmrc -Value 'store-dir=/.pnpm-store'
+
+      - uses: ./
+        with:
+          version: '12.0.0-rc.0'
+          runtime: node@22
+          cache: true
+
+      - name: 'Test: pnpm reports an extended-length store path'
+        run: |
+          $storePath = pnpm store path
+          Write-Host "pnpm store path: $storePath"
+          if (-not $storePath.StartsWith('\\?\')) {
+            throw "Expected an extended-length store path, got: $storePath"
+          }
+
   runtime-node-pnpm11:
     # The whole premise of supporting v11 is that `pnpm runtime` works there.
     # Install pnpm v11, install a runtime through it, and run `pnpm install`.
