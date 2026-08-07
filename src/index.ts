@@ -37,9 +37,7 @@ async function runMain() {
 
   await restoreCache(inputs)
 
-  if (inputs.install) {
-    pnpmInstall(inputs)
-  }
+  pnpmInstall(inputs)
 }
 
 async function runPost() {

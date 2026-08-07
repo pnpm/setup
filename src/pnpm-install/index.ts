@@ -2,30 +2,32 @@ import { info, setFailed, startGroup, endGroup } from '@actions/core'
 import { spawnSync } from 'child_process'
 import { existsSync } from 'fs'
 import path from 'path'
-import { Inputs } from '../inputs'
+import { Inputs, InstallMode } from '../inputs'
 
 export function runPnpmInstall(inputs: Inputs) {
+  if (inputs.install === false) return
+
+  const installArgs = buildArgs(inputs.install)
+  const command = `pnpm ${installArgs.join(' ')}`
+
+  // When the user pinned a runtime explicitly via the `runtime` input, we've
+  // already installed it via `pnpm runtime set`. Pass `--no-runtime` to the
+  // install so the explicit runtime isn't shadowed by a different version
+  // from `devEngines.runtime` on the same install.
+  const args = inputs.runtime ? [...installArgs, '--no-runtime'] : installArgs
+
   // Skip if there's no package.json in the workspace — the action is also
   // useful for jobs that just want pnpm + a runtime on PATH (e.g. running
   // global tooling, ad-hoc scripts) and have no manifest to install.
   const { GITHUB_WORKSPACE } = process.env
   if (!GITHUB_WORKSPACE) {
-    info('GITHUB_WORKSPACE is not set; skipping `pnpm install`.')
+    info(`GITHUB_WORKSPACE is not set; skipping \`${command}\`.`)
     return
   }
   const manifestPath = path.join(GITHUB_WORKSPACE, inputs.packageJsonFile)
   if (!existsSync(manifestPath)) {
-    info(`No ${inputs.packageJsonFile} found in workspace; skipping \`pnpm install\`.`)
+    info(`No ${inputs.packageJsonFile} found in workspace; skipping \`${command}\`.`)
     return
-  }
-
-  // When the user pinned a runtime explicitly via the `runtime` input, we've
-  // already installed it via `pnpm runtime set` above. Pass `--no-runtime`
-  // to `pnpm install` so the explicit runtime isn't shadowed by a different
-  // version from `devEngines.runtime` on the same install.
-  const args = ['install']
-  if (inputs.runtime) {
-    args.push('--no-runtime')
   }
 
   // spawnSync inherits process.env, which already has $PNPM_HOME/bin and
@@ -44,8 +46,19 @@ export function runPnpmInstall(inputs: Inputs) {
     return
   }
   if (status) {
-    setFailed(`pnpm install exited with status ${status}`)
+    setFailed(`${command} exited with status ${status}`)
   }
+}
+
+function buildArgs(mode: InstallMode): string[] {
+  // `pnpm ci` is `pnpm clean` followed by `pnpm install --frozen-lockfile`;
+  // it has been available since pnpm v11, the oldest version this action
+  // installs, so no version gate is needed.
+  const args = mode === 'ci' ? ['ci'] : ['install']
+  if (mode === 'frozen-lockfile') {
+    args.push('--frozen-lockfile')
+  }
+  return args
 }
 
 export default runPnpmInstall
