@@ -7,14 +7,19 @@ import { Inputs, InstallMode } from '../inputs'
 export function runPnpmInstall(inputs: Inputs) {
   if (inputs.install === false) return
 
-  const installArgs = buildArgs(inputs.install)
-  const command = `pnpm ${installArgs.join(' ')}`
+  const args = buildArgs(inputs.install)
 
   // When the user pinned a runtime explicitly via the `runtime` input, we've
   // already installed it via `pnpm runtime set`. Pass `--no-runtime` to the
   // install so the explicit runtime isn't shadowed by a different version
   // from `devEngines.runtime` on the same install.
-  const args = inputs.runtime ? [...installArgs, '--no-runtime'] : installArgs
+  if (inputs.runtime) {
+    args.push('--no-runtime')
+  }
+
+  // Every message below quotes this, so it has to be the command we actually
+  // run — flags included.
+  const command = `pnpm ${args.join(' ')}`
 
   // Skip if there's no package.json in the workspace — the action is also
   // useful for jobs that just want pnpm + a runtime on PATH (e.g. running
@@ -33,8 +38,8 @@ export function runPnpmInstall(inputs: Inputs) {
   // spawnSync inherits process.env, which already has $PNPM_HOME/bin and
   // $PNPM_HOME prepended via addPath() in install-pnpm — so the pnpm this
   // action installed (or a self-updated one) is the one that resolves.
-  startGroup(`Running pnpm ${args.join(' ')}...`)
-  const { error, status } = spawnSync('pnpm', args, {
+  startGroup(`Running ${command}...`)
+  const { error, status, signal } = spawnSync('pnpm', args, {
     stdio: 'inherit',
     cwd: GITHUB_WORKSPACE,
     shell: true,
@@ -45,7 +50,13 @@ export function runPnpmInstall(inputs: Inputs) {
     setFailed(error)
     return
   }
-  if (status) {
+  // A process killed by a signal reports `status: null` with no `error`, so a
+  // truthiness check on `status` alone would let that pass as a success.
+  if (signal) {
+    setFailed(`${command} was terminated by ${signal}`)
+    return
+  }
+  if (status !== 0) {
     setFailed(`${command} exited with status ${status}`)
   }
 }
