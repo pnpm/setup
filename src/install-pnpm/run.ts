@@ -18,7 +18,9 @@ export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerRes
 
   const spec = readTargetVersion({ version, packageJsonFile })
   const resolved = await resolvePnpm(spec, token)
-  info(`Downloading pnpm ${resolved.version} from ${resolved.downloadUrl}`)
+  info(resolved.source === 'registry'
+    ? `Downloading pnpm ${resolved.version} from the npm registry`
+    : `Downloading pnpm ${resolved.version} from ${resolved.downloadUrl}`)
 
   await rm(dest, { recursive: true, force: true })
   // Create dest/bin upfront: pnpm ≤ 12.0.0-alpha.17 refuses to run
