@@ -2,12 +2,11 @@ import { HttpClient } from '@actions/http-client'
 import { spawn } from 'child_process'
 import { createHash } from 'crypto'
 import { createReadStream, createWriteStream, existsSync } from 'fs'
-import { chmod, copyFile, link, mkdir, rename, rm } from 'fs/promises'
+import { chmod, copyFile, link, mkdir, rm } from 'fs/promises'
 import path from 'path'
 import { pipeline } from 'stream/promises'
 import semver from 'semver'
-
-import { type PackageSignature, verifyRegistrySignature } from './verify-signature'
+import { downloadPnpm as downloadVerifiedPnpm } from 'get-pnpm'
 
 // The action downloads pnpm's self-contained release archive and uses
 // `pnpm runtime` to install a JavaScript runtime. Both are available from v11
@@ -44,24 +43,7 @@ export type ResolvedPnpm =
   | {
     readonly source: 'registry'
     readonly version: string
-    readonly packages: readonly RegistryPackage[]
   }
-
-interface RegistryPackage {
-  readonly name: string
-  readonly tarball: string
-  readonly integrity: string
-  /** Entry to lift out of the tarball's `package/` root into the destination. */
-  readonly keep: string
-}
-
-interface VersionMetadata {
-  readonly dist: {
-    readonly tarball: string
-    readonly integrity?: string
-    readonly signatures?: readonly PackageSignature[]
-  }
-}
 
 interface AbbreviatedPackument {
   readonly versions: Record<string, unknown>
@@ -90,7 +72,7 @@ To install older pnpm, use the pnpm/action-setup action instead.`)
 
   const platform = getPlatform()
   if (semver.major(version) >= 12) {
-    return resolveFromRegistry(version, platform)
+    return { source: 'registry', version }
   }
 
   const asset = assetName(platform)
@@ -116,34 +98,6 @@ To install older pnpm, use the pnpm/action-setup action instead.`)
 }
 
 /**
- * The executable and the `dist/` tree it loads are published as two packages:
- * the platform package holds the binary, `pnpm` holds `dist/`. Both are
- * verified the same way.
- */
-async function resolveFromRegistry(version: string, platform: Platform): Promise<ResolvedPnpm> {
-  const exe = platform.os === 'win32' ? 'pnpm.exe' : 'pnpm'
-  const wanted = [
-    { name: platformPackageName(platform), keep: exe },
-    { name: 'pnpm', keep: 'dist' },
-  ]
-  const packages = await Promise.all(wanted.map(async ({ name, keep }) => {
-    const meta = await fetchJson<VersionMetadata>(`${REGISTRY}/${name}/${version}`)
-    const integrity = meta.dist.integrity
-    if (!integrity) {
-      throw new Error(`The npm registry published no checksum for ${name}@${version}.`)
-    }
-    verifyRegistrySignature({ name, version, integrity, signatures: meta.dist.signatures })
-    return { name, tarball: meta.dist.tarball, integrity, keep }
-  }))
-  return { source: 'registry', version, packages }
-}
-
-// Platform packages are named `@pnpm/exe.<os>-<arch>[-musl]`.
-function platformPackageName({ os, arch, musl }: Platform): string {
-  return `@pnpm/exe.${os}-${arch}${musl ? '-musl' : ''}`
-}
-
-/**
  * Downloads and extracts the pnpm release archive into `destDir`, returning the
  * path to the `pnpm` executable. The archive holds the executable at its root
  * plus, for Node-SEA builds (v11), a sibling `dist/` it loads at runtime — the
@@ -156,7 +110,10 @@ export async function downloadPnpm(resolved: ResolvedPnpm, destDir: string): Pro
   await mkdir(tmpDir, { recursive: true })
 
   if (resolved.source === 'registry') {
-    await downloadFromRegistry(resolved.packages, destDir, tmpDir)
+    // get-pnpm resolves the platform package, checks npm's signature over its
+    // checksum against a pinned key, checks the download against that checksum,
+    // and places the executable beside the `dist/` tree it loads.
+    await downloadVerifiedPnpm({ versionSpec: resolved.version, registry: REGISTRY, dest: destDir })
   } else {
     const archivePath = path.join(tmpDir, resolved.archive === 'zip' ? 'pnpm.zip' : 'pnpm.tgz')
     const response = await http.get(resolved.downloadUrl)
@@ -286,47 +243,6 @@ async function fetchJson<T>(url: string, headers?: Record<string, string>): Prom
     throw new Error(`Unexpected empty response from ${url}`)
   }
   return response.result
-}
-
-/**
- * Fetches each package, checks it against the checksum npm signed for it, and
- * lifts the wanted entry out of the tarball's `package/` root. Unpacking
- * happens away from `destDir`, whose layout the executable depends on.
- */
-async function downloadFromRegistry(
-  packages: readonly RegistryPackage[],
-  destDir: string,
-  tmpDir: string,
-): Promise<void> {
-  for (const pkg of packages) {
-    const safeName = pkg.name.replace(/[@/]/g, '_')
-    const archivePath = path.join(tmpDir, `${safeName}.tgz`)
-    const response = await http.get(pkg.tarball)
-    if (response.message.statusCode !== 200) {
-      response.message.resume()
-      throw new Error(`Failed to download ${pkg.tarball}: HTTP ${response.message.statusCode}`)
-    }
-    await pipeline(response.message, createWriteStream(archivePath))
-    await verifyIntegrity(archivePath, pkg)
-
-    const unpackDir = path.join(tmpDir, safeName)
-    await mkdir(unpackDir, { recursive: true })
-    await extractArchive(archivePath, unpackDir, 'tar.gz')
-    await rm(path.join(destDir, pkg.keep), { recursive: true, force: true })
-    await rename(path.join(unpackDir, 'package', pkg.keep), path.join(destDir, pkg.keep))
-  }
-}
-
-async function verifyIntegrity(file: string, pkg: RegistryPackage): Promise<void> {
-  const [algorithm, expected] = pkg.integrity.split('-')
-  const hash = createHash(algorithm)
-  await pipeline(createReadStream(file), hash)
-  const actual = hash.digest('base64')
-  if (actual !== expected) {
-    throw new Error(`${pkg.name}@${pkg.integrity} does not match the checksum the npm registry published for it. Refusing to install.
-  Expected ${algorithm}: ${expected}
-  Actual   ${algorithm}: ${actual}`)
-  }
 }
 
 async function verifySha256(file: string, expectedHex: string, url: string): Promise<void> {

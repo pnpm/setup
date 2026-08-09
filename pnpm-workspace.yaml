@@ -2,3 +2,5 @@ packages:
   - '.'
 allowBuilds:
   esbuild: true
+minimumReleaseAgeExclude:
+  - get-pnpm@0.0.1
