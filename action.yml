@@ -60,12 +60,13 @@ inputs:
     required: false
     default: 'true'
   token:
-    description: |
-      GitHub token used to look up the pnpm release (and its asset checksum)
-      via the GitHub API. Defaults to the workflow's automatic token, which
-      lifts the low anonymous API rate limit. Rarely needs to be set.
+    description: >
+      No longer used. pnpm is fetched from the npm registry and verified
+      against npm's signature, so no GitHub API request is made. Kept so
+      workflows that pass it keep working.
     required: false
-    default: ${{ github.token }}
+    deprecationMessage: 'The token input is no longer used; pnpm is fetched from the npm registry.'
+
 outputs:
   dest:
     description: Expanded path of inputs#dest
