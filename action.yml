@@ -32,6 +32,11 @@ inputs:
       If this input is omitted entirely, the action reads `devEngines.runtime`
       from the project's package.json. If that is also missing, no runtime is
       installed.
+
+      Whenever a runtime is installed, the action exports
+      `PNPM_CONFIG_GLOBAL_SHIMS` with that runtime's context-aware shim
+      disabled, so later steps run exactly this version instead of one a
+      project pins. Set the variable in the workflow to override.
     required: false
   cache:
     description: Whether to cache the pnpm store directory

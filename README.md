@@ -112,8 +112,22 @@ For jobs that only need pnpm itself — e.g. `pnpm audit`, lockfile-only regener
 
 1. The action resolves the requested version (exact, range, or dist-tag) against the npm registry, then downloads the matching self-contained release archive for the runner's platform (`pnpm-<os>-<arch>.tar.gz`, or `pnpm-win32-<arch>.zip` on Windows) from pnpm's GitHub releases. It verifies the archive against the SHA-256 digest GitHub publishes for the asset, extracts the `pnpm` executable (and, for pnpm builds that need it, its bundled `dist/`), and links the `pnpx`, `pn`, and `pnx` aliases into `dest`. No Node.js or npm is involved.
 2. `PNPM_HOME` is exported and `dest` plus `$PNPM_HOME/bin` are added to `PATH`.
-3. The action runs `pnpm runtime set <name> <version> -g`, which downloads the requested runtime into `$PNPM_HOME/bin` — making `node`, `bun`, or `deno` available to later workflow steps.
+3. The action runs `pnpm runtime set <name> <version> -g`, which downloads the requested runtime into `$PNPM_HOME/bin` — making `node`, `bun`, or `deno` available to later workflow steps. It then exports `PNPM_CONFIG_GLOBAL_SHIMS={"<name>":false}` so that runtime stays the one later steps get; see [Context-aware global shims](#context-aware-global-shims).
 4. If a `package.json` exists in the workspace, the action runs `pnpm install` (unless `install: false` is set). When the `runtime` input is set, `--no-runtime` is appended so the just-installed runtime isn't shadowed by a different version declared in `devEngines.runtime`.
+
+### Context-aware global shims
+
+pnpm 12 links global runtime bins as context-aware shims: running `node` inside a project switches to the version that project pins in `devEngines.runtime`, fetching it on demand. In a workflow that is rarely what you want — a matrix job asking for `node@22` would run the repository's pinned version instead, and even when the two versions agree pnpm materializes a second copy outside `$PNPM_HOME`.
+
+So whenever the action installs a runtime, it exports `PNPM_CONFIG_GLOBAL_SHIMS` with that runtime disabled (`{"node":false}`), leaving every other runtime at pnpm's defaults. To keep the switching behaviour, set the variable yourself — the action never overwrites a value the workflow already provides:
+
+```yaml
+- uses: pnpm/setup@v2
+  env:
+    PNPM_CONFIG_GLOBAL_SHIMS: '{"node":"auto"}'
+  with:
+    runtime: node@22
+```
 
 ## License
 

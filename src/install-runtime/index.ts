@@ -1,4 +1,4 @@
-import { setFailed, startGroup, endGroup, info } from '@actions/core'
+import { exportVariable, setFailed, startGroup, endGroup, info } from '@actions/core'
 import { spawn } from 'child_process'
 import { readFileSync } from 'fs'
 import path from 'path'
@@ -7,6 +7,11 @@ import { parse as parseYaml } from 'yaml'
 import { Inputs, RuntimeName } from '../inputs'
 
 const SUPPORTED_RUNTIMES: ReadonlySet<RuntimeName> = new Set(['node', 'bun', 'deno'])
+
+// The names pnpm reads the `globalShims` setting from, in the order pnpm
+// itself checks them — the first one present wins, so a workflow that sets
+// either of them must not be overridden by the other.
+const GLOBAL_SHIMS_ENV_NAMES = ['PNPM_CONFIG_GLOBAL_SHIMS', 'pnpm_config_global_shims'] as const
 
 export interface InstalledRuntime {
   readonly name: RuntimeName
@@ -50,7 +55,27 @@ export async function installRuntime(
     setFailed(`pnpm runtime set ${request.name} ${request.version} -g exited with code ${exitCode}`)
     return undefined
   }
+  keepInstalledRuntimeAuthoritative(request.name)
   return { name: request.name, version: request.version }
+}
+
+/**
+ * pnpm 12 links global runtime bins as context-aware shims: running `node`
+ * from `$PNPM_HOME/bin` inside a project switches to the version that
+ * project pins in `devEngines.runtime`, fetching it on demand. That defeats
+ * the version this action was asked to install — a matrix job asking for
+ * `node@22` would run the repository's pinned version instead — and even
+ * when the two agree it materializes a second copy outside `$PNPM_HOME`.
+ * Turn the shim off for the runtime we installed, leaving every other
+ * runtime at pnpm's defaults. A value the workflow set itself always wins.
+ */
+function keepInstalledRuntimeAuthoritative(name: RuntimeName) {
+  const configured = GLOBAL_SHIMS_ENV_NAMES.find(envName => process.env[envName])
+  if (configured) {
+    info(`\`${configured}\` is already set; leaving pnpm's context-aware shims as configured.`)
+    return
+  }
+  exportVariable(GLOBAL_SHIMS_ENV_NAMES[0], JSON.stringify({ [name]: false }))
 }
 
 export function logSkippedRuntime() {
