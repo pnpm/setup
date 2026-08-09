@@ -70,6 +70,8 @@ export async function installRuntime(
  * runtime at pnpm's defaults. A value the workflow set itself always wins.
  */
 function keepInstalledRuntimeAuthoritative(name: RuntimeName) {
+  // An empty value counts as unset, the same rule pnpm applies when it reads
+  // these — stepping aside for a value pnpm ignores would leave the shim on.
   const configured = GLOBAL_SHIMS_ENV_NAMES.find(envName => process.env[envName])
   if (configured) {
     info(`\`${configured}\` is already set; leaving pnpm's context-aware shims as configured.`)

@@ -469,11 +469,16 @@ jobs:
 
   context-shims-opt-out:
     # The counterpart to the job above, and its canary: a workflow that sets
-    # PNPM_CONFIG_GLOBAL_SHIMS itself keeps pnpm's switching behaviour, so
-    # the project's pin wins. If this job stops switching, the job above is
-    # no longer proving anything.
-    name: 'Workflow-set PNPM_CONFIG_GLOBAL_SHIMS is not overwritten'
+    # the setting itself keeps pnpm's switching behaviour, so the project's
+    # pin wins. If this job stops switching, the job above is no longer
+    # proving anything. Both spellings pnpm accepts are covered, since
+    # honouring only one of them would silently override the other.
+    name: 'Workflow-set ${{ matrix.env_name }} is not overwritten'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env_name: [PNPM_CONFIG_GLOBAL_SHIMS, pnpm_config_global_shims]
     steps:
       - uses: actions/checkout@v7
 
@@ -490,17 +495,22 @@ jobs:
           EOF
         shell: bash
 
-      - uses: ./
+      - name: Opt back into context-aware shims
         env:
-          PNPM_CONFIG_GLOBAL_SHIMS: '{"node":"auto"}'
+          ENV_NAME: ${{ matrix.env_name }}
+        run: printf '%s={"node":"auto"}\n' "$ENV_NAME" >> "$GITHUB_ENV"
+        shell: bash
+
+      - uses: ./
         with:
           runtime: node@22
 
       - name: "Test: the project's pin still wins"
         run: |
           set -e
-          if [ -n "${PNPM_CONFIG_GLOBAL_SHIMS}" ]; then
-            echo "Expected PNPM_CONFIG_GLOBAL_SHIMS to stay unexported, got '${PNPM_CONFIG_GLOBAL_SHIMS}'"
+          echo "PNPM_CONFIG_GLOBAL_SHIMS: ${PNPM_CONFIG_GLOBAL_SHIMS}"
+          if [ "${PNPM_CONFIG_GLOBAL_SHIMS}" = '{"node":false}' ]; then
+            echo "The action overwrote the setting the workflow provided"
             exit 1
           fi
           actual="$(node --version)"
