@@ -596,11 +596,11 @@ jobs:
           pnpm --version
         shell: bash
 
-  install-frozen-lockfile:
-    # `install: frozen-lockfile` runs `pnpm install --frozen-lockfile`: it
+  install-require-lockfile:
+    # `install: require-lockfile` runs `pnpm install --frozen-lockfile`: it
     # installs against an up-to-date lockfile, and fails rather than updating
     # one that has drifted from package.json.
-    name: 'install: frozen-lockfile'
+    name: 'install: require-lockfile'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -618,7 +618,7 @@ jobs:
           EOF
         shell: bash
 
-      - name: Write the lockfile the frozen install will be checked against
+      - name: Write the lockfile the require-lockfile install will be checked against
         uses: ./
         with:
           version: '12.0.0-beta.4'
@@ -630,13 +630,13 @@ jobs:
       - uses: ./
         with:
           version: '12.0.0-beta.4'
-          install: frozen-lockfile
+          install: require-lockfile
 
-      - name: 'Test: dependencies installed from the frozen lockfile'
+      - name: 'Test: dependencies installed from the lockfile'
         run: |
           set -e
           if [ ! -d node_modules/is-odd ]; then
-            echo "Expected install: frozen-lockfile to populate node_modules/is-odd"; exit 1
+            echo "Expected install: require-lockfile to populate node_modules/is-odd"; exit 1
           fi
         shell: bash
 
@@ -659,7 +659,7 @@ jobs:
         uses: ./
         with:
           version: '12.0.0-beta.4'
-          install: frozen-lockfile
+          install: require-lockfile
 
       - name: 'Test: the outdated lockfile failed the step'
         env:
@@ -668,10 +668,10 @@ jobs:
           set -e
           echo "outcome: ${OUTCOME}"
           if [ "${OUTCOME}" != "failure" ]; then
-            echo "Expected install: frozen-lockfile to fail on an outdated lockfile"; exit 1
+            echo "Expected install: require-lockfile to fail on an outdated lockfile"; exit 1
           fi
           if ! sha256sum --check --status lockfile.sha256; then
-            echo "Expected the lockfile not to be updated by a frozen install"; exit 1
+            echo "Expected the lockfile not to be updated by require-lockfile"; exit 1
           fi
           echo "ok: lockfile was left untouched"
         shell: bash
@@ -781,7 +781,7 @@ jobs:
         uses: ./
         with:
           version: '12.0.0-beta.4'
-          install: frozen-lockfile
+          install: require-lockfile
 
       - name: 'Test: only the invalid values failed'
         env:

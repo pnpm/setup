@@ -21,7 +21,7 @@ If your `package.json` declares `devEngines.runtime`, the action picks up the ru
 | `cache` | Cache the pnpm store directory. Default: `false`. |
 | `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Default: `pnpm-lock.yaml`. |
 | `package-json-file` | Path to `package.json` (relative to `GITHUB_WORKSPACE`). Default: `package.json`. |
-| `install` | Which install to run after setup: `true` (default, same as `install`) → `pnpm install`; `frozen-lockfile` → `pnpm install --frozen-lockfile`; `ci` → `pnpm ci`; `false` → skip it. |
+| `install` | Which install to run after setup: `true` (default, same as `install`) → `pnpm install`; `require-lockfile` → `pnpm install --frozen-lockfile`; `ci` → `pnpm ci`; `false` → skip it. |
 | `token` | No longer used. pnpm is fetched from the npm registry and verified against npm's signature, so the action makes no GitHub API request. Kept so workflows that pass it keep working. |
 
 ## Outputs
@@ -102,11 +102,11 @@ jobs:
 By default the action runs a plain `pnpm install`. The `install` input picks a stricter install instead:
 
 ```yaml
-# Fail if pnpm-lock.yaml is out of date with package.json,
-# rather than updating the lockfile.
+# The install must be fully described by pnpm-lock.yaml.
+# Fails if the lockfile is missing or out of date.
 - uses: pnpm/setup@v2
   with:
-    install: frozen-lockfile
+    install: require-lockfile
 
 # `pnpm clean` + `pnpm install --frozen-lockfile`: rebuild
 # node_modules from scratch instead of reconciling it.
@@ -115,7 +115,10 @@ By default the action runs a plain `pnpm install`. The `install` input picks a s
     install: ci
 ```
 
-Both require a `pnpm-lock.yaml` — without one they fail with `ERR_PNPM_NO_LOCKFILE` instead of resolving from scratch.
+`require-lockfile` runs `pnpm install --frozen-lockfile`. It fails with `ERR_PNPM_NO_LOCKFILE` when there is no `pnpm-lock.yaml`, and with `ERR_PNPM_OUTDATED_LOCKFILE` when the lockfile has drifted from `package.json`. In both cases the lockfile is left untouched. `ci` requires a lockfile on the same terms.
+
+> [!NOTE]
+> This is not the same as pnpm's own CI default. pnpm 11 enables `--frozen-lockfile` when it detects a CI environment, but that only prevents an *existing* lockfile from being updated — with no lockfile at all, pnpm still resolves from the registry and writes one, and the build passes. pnpm 12 does not apply the CI default at all, as of 12.0.0-rc.3. `require-lockfile` makes the behaviour explicit and identical across both.
 
 > [!NOTE]
 > `pnpm ci` removes `node_modules` before installing, so anything an earlier step left there is discarded. Two caveats: a `clean` script in your `package.json` overrides `pnpm clean`, in which case that script runs instead and `node_modules` survives; and this action's `cache` input caches the pnpm store, never `node_modules`, so `install: ci` is not guarding against a poisoned dependency cache.
@@ -136,7 +139,7 @@ For jobs that only need pnpm itself — e.g. `pnpm audit`, lockfile-only regener
 1. The action resolves the requested version (exact, range, or dist-tag) against the npm registry, then downloads the matching self-contained release archive for the runner's platform (`pnpm-<os>-<arch>.tar.gz`, or `pnpm-win32-<arch>.zip` on Windows) from pnpm's GitHub releases. It verifies the archive against the SHA-256 digest GitHub publishes for the asset, extracts the `pnpm` executable (and, for pnpm builds that need it, its bundled `dist/`), and links the `pnpx`, `pn`, and `pnx` aliases into `dest`. No Node.js or npm is involved.
 2. `PNPM_HOME` is exported and `dest` plus `$PNPM_HOME/bin` are added to `PATH`.
 3. The action runs `pnpm runtime set <name> <version> -g`, which downloads the requested runtime into `$PNPM_HOME/bin` — making `node`, `bun`, or `deno` available to later workflow steps. It then exports `PNPM_CONFIG_GLOBAL_SHIMS={"<name>":false}` so that runtime stays the one later steps get; see [Context-aware global shims](#context-aware-global-shims).
-4. If a `package.json` exists in the workspace, the action runs the install selected by the `install` input — `pnpm install` by default, `pnpm install --frozen-lockfile` or `pnpm ci` on request, or nothing at all with `install: false`. When the `runtime` input is set, `--no-runtime` is appended so the just-installed runtime isn't shadowed by a different version declared in `devEngines.runtime`.
+4. If a `package.json` exists in the workspace, the action runs the install selected by the `install` input — `pnpm install` by default, `pnpm install --frozen-lockfile` (`require-lockfile`) or `pnpm ci` on request, or nothing at all with `install: false`. When the `runtime` input is set, `--no-runtime` is appended so the just-installed runtime isn't shadowed by a different version declared in `devEngines.runtime`.
 
 ### Context-aware global shims
 

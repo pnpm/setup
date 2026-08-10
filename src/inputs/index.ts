@@ -11,9 +11,9 @@ export interface RuntimeInput {
 }
 
 /** Which install the action runs once pnpm and the runtime are in place. */
-export type InstallMode = 'install' | 'frozen-lockfile' | 'ci'
+export type InstallMode = 'install' | 'require-lockfile' | 'ci'
 
-const INSTALL_MODES: readonly InstallMode[] = ['install', 'frozen-lockfile', 'ci']
+const INSTALL_MODES: readonly InstallMode[] = ['install', 'require-lockfile', 'ci']
 
 export interface Inputs {
   readonly version?: string

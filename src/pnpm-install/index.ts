@@ -66,7 +66,7 @@ function buildArgs(mode: InstallMode): string[] {
   // it has been available since pnpm v11, the oldest version this action
   // installs, so no version gate is needed.
   const args = mode === 'ci' ? ['ci'] : ['install']
-  if (mode === 'frozen-lockfile') {
+  if (mode === 'require-lockfile') {
     args.push('--frozen-lockfile')
   }
   return args
