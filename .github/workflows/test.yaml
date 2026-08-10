@@ -618,13 +618,18 @@ jobs:
           EOF
         shell: bash
 
-      - name: Write the lockfile the require-lockfile install will be checked against
+      - name: Put pnpm on PATH without installing
         uses: ./
         with:
           version: '12.0.0-beta.4'
           install: false
 
-      - run: pnpm install --lockfile-only
+      - name: Write the lockfile and record its checksum
+        # Recorded before any require-lockfile run, so both the successful and
+        # the failing install below are checked against the original file.
+        run: |
+          pnpm install --lockfile-only
+          sha256sum pnpm-lock.yaml > lockfile.sha256
         shell: bash
 
       - uses: ./
@@ -632,17 +637,19 @@ jobs:
           version: '12.0.0-beta.4'
           install: require-lockfile
 
-      - name: 'Test: dependencies installed from the lockfile'
+      - name: 'Test: dependencies installed from the lockfile, which is untouched'
         run: |
           set -e
           if [ ! -d node_modules/is-odd ]; then
             echo "Expected install: require-lockfile to populate node_modules/is-odd"; exit 1
           fi
+          if ! sha256sum --check --status lockfile.sha256; then
+            echo "Expected a successful require-lockfile install to leave the lockfile alone"; exit 1
+          fi
         shell: bash
 
       - name: Add a dependency the lockfile does not know about
         run: |
-          sha256sum pnpm-lock.yaml > lockfile.sha256
           cat > package.json <<'EOF'
           {
             "packageManager": "pnpm@12.0.0-beta.4",
