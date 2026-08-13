@@ -18,7 +18,7 @@ If your `package.json` declares `devEngines.runtime`, the action picks up the ru
 | `version` | Version of pnpm to install: an exact version, a semver range (`^12.0.0`), or a dist-tag (`next-12`). Must resolve to v11 or newer. Optional when `packageManager` or `devEngines.packageManager` is set in `package.json`. |
 | `dest` | Where to store pnpm files. Defaults to `~/setup-pnpm`. |
 | `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime` in `package.json`, then to `lts` (for `node`) / `latest`. If the input itself is omitted, the action reads `devEngines.runtime` from `package.json`. |
-| `cache` | Cache the pnpm store directory and the lockfile verification results. Default: `false`. |
+| `cache` | Cache the pnpm store directory. Default: `false`. The lockfile verification results are cached regardless — see [below](#lockfile-verification-cache). |
 | `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Default: `pnpm-lock.yaml`. |
 | `package-json-file` | Path to `package.json` (relative to `GITHUB_WORKSPACE`). Default: `package.json`. |
 | `install` | Run `pnpm install` after setup. Default: `true`. Set to `false` for jobs that only need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration). |
@@ -97,14 +97,26 @@ jobs:
     cache: true
 ```
 
-This caches two things, both keyed on the lockfile:
+### Lockfile verification cache
 
-- the **pnpm store**, so packages are not downloaded again;
-- the **lockfile verification results**, so pnpm does not re-check every
-  lockfile entry against your supply-chain policies (`minimumReleaseAge`,
-  `trustPolicy`, …) on each run. On a large repository that check can take
-  longer than the install itself, and its result depends only on the lockfile
-  and the policies — never on the runner.
+pnpm v11 and newer check every lockfile entry before installing it — that each
+entry pins an integrity hash, that a pinned tarball URL matches the registry's
+own metadata, and, where configured, your `minimumReleaseAge` and `trustPolicy`
+policies. The verdict is memoized in a sub-kilobyte file, so an unchanged
+lockfile is not re-checked against the registry.
+
+The action restores and saves that file on every run, independently of the
+`cache` input, because a job that starts without it pays for the check every
+time. On a repository with ~2000 lockfile entries and a warm store:
+
+| | without the log | with it |
+| --- | --- | --- |
+| `minimumReleaseAge` + `trustPolicy` | 13.5s | 1.5s |
+| no policies configured | 6.7s | 1.6s |
+
+Reusing a verdict is not a weaker check: pnpm re-verifies whenever the lockfile
+content changes, and whenever the recorded policy is looser than the one now
+configured.
 
 ### Skip `pnpm install`
 
