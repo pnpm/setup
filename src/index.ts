@@ -41,7 +41,7 @@ async function runMain() {
   if (inputs.install) {
     pnpmInstall(inputs)
   }
-  await saveVerificationCache()
+  await saveVerificationCache(inputs.install ? 1 : 0)
 }
 
 async function runPost() {
