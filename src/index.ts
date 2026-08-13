@@ -4,6 +4,7 @@ import saveCache from './cache-save'
 import getInputs, { Inputs } from './inputs'
 import installPnpm from './install-pnpm'
 import { resolveRuntimeRequest, installRuntime, InstalledRuntime, logSkippedRuntime } from './install-runtime'
+import { saveVerificationCache } from './lockfile-verification-cache'
 import setOutputs from './outputs'
 import pnpmInstall from './pnpm-install'
 import pruneStore from './pnpm-store-prune'
@@ -40,10 +41,15 @@ async function runMain() {
   if (inputs.install) {
     pnpmInstall(inputs)
   }
+  await saveVerificationCache(inputs.install ? 1 : 0)
 }
 
 async function runPost() {
   const inputs = JSON.parse(getState('inputs')) as Inputs
+  // Covers a job that installs in a later step of its own; when this action
+  // installed, the log was already saved then. Runs before the prune because
+  // pnpm versions before pnpm/pnpm#13893 delete the log during one.
+  await saveVerificationCache()
   pruneStore(inputs)
   await saveCache(inputs)
 }
