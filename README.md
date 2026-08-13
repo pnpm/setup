@@ -120,10 +120,15 @@ configured.
 
 The log is uploaded as soon as the install that produced it finishes, not at
 the end of the job, so nothing the job runs afterwards — its tests, its build,
-a dependency's own scripts — can alter what later jobs restore. A job that
-installs in a step of its own rather than through this action is saved at the
-end of the job instead, since that is the first moment the log is known to be
-complete.
+any later step — can alter what other jobs restore. Dependency lifecycle
+scripts are the exception, since they run inside the install itself, ahead of
+the upload: pnpm refuses to run them unless the repository allow-lists the
+package through `allowBuilds`, and a package on that list can already run code
+in the job.
+
+A job that installs in a step of its own rather than through this action is
+saved at the end of the job instead, since that is the first moment the log is
+known to be complete.
 
 ### Skip `pnpm install`
 
