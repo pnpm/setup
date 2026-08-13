@@ -4,6 +4,7 @@ import saveCache from './cache-save'
 import getInputs, { Inputs } from './inputs'
 import installPnpm from './install-pnpm'
 import { resolveRuntimeRequest, installRuntime, InstalledRuntime, logSkippedRuntime } from './install-runtime'
+import { saveVerificationCache } from './lockfile-verification-cache'
 import setOutputs from './outputs'
 import pnpmInstall from './pnpm-install'
 import pruneStore from './pnpm-store-prune'
@@ -44,6 +45,9 @@ async function runMain() {
 
 async function runPost() {
   const inputs = JSON.parse(getState('inputs')) as Inputs
+  // Saved ahead of the prune because `pnpm store prune` drops the
+  // verification log along with the rest of the store's derived state.
+  await saveVerificationCache()
   pruneStore(inputs)
   await saveCache(inputs)
 }
