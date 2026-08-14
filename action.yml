@@ -52,16 +52,38 @@ inputs:
     default: 'package.json'
   install:
     description: |
-      Whether to run `pnpm install` after pnpm and the runtime are set up.
+      Which install to run after pnpm and the runtime are set up. The install
+      only runs when a package.json is present in the workspace.
 
-      When set to `true` (the default), the action runs `pnpm install` in the
-      workspace when a package.json is present. When the `runtime` input is
-      also set, `--no-runtime` is appended automatically so the installed
-      runtime isn't shadowed by a different version declared in
-      `devEngines.runtime`.
+      - `true` (the default) or `install`: `pnpm install`
+      - `require-lockfile`: `pnpm install --frozen-lockfile` — the install has
+        to be fully described by `pnpm-lock.yaml`. It fails if the lockfile is
+        missing (`ERR_PNPM_NO_LOCKFILE`) or out of date with package.json
+        (`ERR_PNPM_OUTDATED_LOCKFILE`) instead of resolving and writing one.
+      - `ci`: `pnpm ci` — `pnpm clean` followed by
+        `pnpm install --frozen-lockfile`, so it requires a lockfile on the same
+        terms as `require-lockfile`
+      - `false`: skip the install step — useful for jobs that only need pnpm
+        itself (e.g. `pnpm audit`, lockfile-only regeneration)
 
-      Set to `false` to skip the install step — useful for jobs that only
-      need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration).
+      Anything else is an error, including an empty value — the default above
+      applies only when the input is omitted entirely, so an expression that
+      resolves to an empty string fails rather than silently installing.
+
+      `require-lockfile` is not the same as pnpm's own CI default. pnpm 11
+      turns `--frozen-lockfile` on when it detects a CI environment, but that
+      only stops an existing lockfile from being updated — a missing lockfile
+      is still resolved from the registry and written. pnpm 12 does not apply
+      the CI default at all, as of 12.0.0-rc.3. This input makes the behaviour
+      explicit and identical on both.
+
+      Note that `pnpm clean` — and therefore the clean half of `pnpm ci` — is
+      overridden by a `clean` script in package.json, in which case that script
+      runs instead and `node_modules` is not removed.
+
+      When the `runtime` input is also set, `--no-runtime` is appended
+      automatically so the installed runtime isn't shadowed by a different
+      version declared in `devEngines.runtime`.
     required: false
     default: 'true'
   token:

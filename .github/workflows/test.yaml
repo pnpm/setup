@@ -596,6 +596,219 @@ jobs:
           pnpm --version
         shell: bash
 
+  install-require-lockfile:
+    # `install: require-lockfile` runs `pnpm install --frozen-lockfile`: it
+    # installs against an up-to-date lockfile, and fails rather than updating
+    # one that has drifted from package.json.
+    name: 'install: require-lockfile'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up a manifest with a matching lockfile
+        run: |
+          rm -f pnpm-lock.yaml
+          cat > package.json <<'EOF'
+          {
+            "packageManager": "pnpm@12.0.0-beta.4",
+            "dependencies": {
+              "is-odd": "3.0.1"
+            }
+          }
+          EOF
+        shell: bash
+
+      - name: Put pnpm on PATH without installing
+        uses: ./
+        with:
+          version: '12.0.0-beta.4'
+          install: false
+
+      - name: Write the lockfile and record its checksum
+        # Recorded before any require-lockfile run, so both the successful and
+        # the failing install below are checked against the original file.
+        run: |
+          pnpm install --lockfile-only
+          sha256sum pnpm-lock.yaml > lockfile.sha256
+        shell: bash
+
+      - uses: ./
+        with:
+          version: '12.0.0-beta.4'
+          install: require-lockfile
+
+      - name: 'Test: dependencies installed from the lockfile, which is untouched'
+        run: |
+          set -e
+          if [ ! -d node_modules/is-odd ]; then
+            echo "Expected install: require-lockfile to populate node_modules/is-odd"; exit 1
+          fi
+          if ! sha256sum --check --status lockfile.sha256; then
+            echo "Expected a successful require-lockfile install to leave the lockfile alone"; exit 1
+          fi
+        shell: bash
+
+      - name: Add a dependency the lockfile does not know about
+        run: |
+          cat > package.json <<'EOF'
+          {
+            "packageManager": "pnpm@12.0.0-beta.4",
+            "dependencies": {
+              "is-odd": "3.0.1",
+              "is-even": "1.0.0"
+            }
+          }
+          EOF
+        shell: bash
+
+      - id: outdated
+        continue-on-error: true
+        uses: ./
+        with:
+          version: '12.0.0-beta.4'
+          install: require-lockfile
+
+      - name: 'Test: the outdated lockfile failed the step'
+        env:
+          OUTCOME: ${{ steps.outdated.outcome }}
+        run: |
+          set -e
+          echo "outcome: ${OUTCOME}"
+          if [ "${OUTCOME}" != "failure" ]; then
+            echo "Expected install: require-lockfile to fail on an outdated lockfile"; exit 1
+          fi
+          if ! sha256sum --check --status lockfile.sha256; then
+            echo "Expected the lockfile not to be updated by require-lockfile"; exit 1
+          fi
+          echo "ok: lockfile was left untouched"
+        shell: bash
+
+  install-ci:
+    # `install: ci` runs `pnpm ci` — `pnpm clean` followed by
+    # `pnpm install --frozen-lockfile` — so a stale node_modules entry left by
+    # an earlier step (or a restored cache) is gone afterwards, which is what
+    # separates it from a plain `pnpm install`.
+    name: 'install: ci'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up a manifest and a stale node_modules entry
+        # `devEngines.runtime` deliberately conflicts with the `runtime` input
+        # below so the node-version assertion actually tests `--no-runtime`
+        # rather than passing either way.
+        run: |
+          rm -f pnpm-lock.yaml
+          cat > package.json <<'EOF'
+          {
+            "packageManager": "pnpm@12.0.0-beta.4",
+            "devEngines": {
+              "runtime": { "name": "node", "version": "^20.0.0", "onFail": "download" }
+            },
+            "dependencies": {
+              "is-odd": "3.0.1"
+            }
+          }
+          EOF
+          mkdir -p node_modules/stale-package
+          echo '{"name":"stale-package","version":"1.0.0"}' > node_modules/stale-package/package.json
+        shell: bash
+
+      - name: Write the lockfile `pnpm ci` will install from
+        uses: ./
+        with:
+          version: '12.0.0-beta.4'
+          install: false
+
+      - run: pnpm install --lockfile-only --no-runtime
+        shell: bash
+
+      - name: 'Precondition: the stale entry is still there'
+        # Without this the cleanup assertion below could pass vacuously.
+        run: |
+          set -e
+          if [ ! -d node_modules/stale-package ]; then
+            echo "Setup is broken: node_modules/stale-package is gone before the action ran"; exit 1
+          fi
+        shell: bash
+
+      - uses: ./
+        with:
+          version: '12.0.0-beta.4'
+          runtime: node@22
+          install: ci
+
+      - name: 'Test: node_modules rebuilt from scratch'
+        run: |
+          set -e
+          if [ ! -d node_modules/is-odd ]; then
+            echo "Expected install: ci to populate node_modules/is-odd"; exit 1
+          fi
+          if [ -d node_modules/stale-package ]; then
+            echo "Expected install: ci to clean node_modules, but stale-package survived"; exit 1
+          fi
+          # `--no-runtime` is still appended on the `ci` path: without it the
+          # install would fetch the node ^20 from devEngines.runtime and
+          # shadow the node 22 the action just installed.
+          node_version="$(node --version)"
+          echo "node --version: ${node_version}"
+          case "${node_version}" in
+            v22.*) ;;
+            *) echo "Expected node v22.x to stay active after pnpm ci, got ${node_version}"; exit 1 ;;
+          esac
+        shell: bash
+
+  install-invalid:
+    # An unrecognized `install` value is a typo, not a silent fallback to the
+    # default install. Neither is an empty one — the action.yml default applies
+    # only when the input is omitted, so an empty value means an expression
+    # resolved to nothing.
+    name: 'install: rejects an unknown value'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: invalid
+        continue-on-error: true
+        uses: ./
+        with:
+          version: '12.0.0-beta.4'
+          install: frozen
+
+      - id: empty
+        continue-on-error: true
+        uses: ./
+        with:
+          version: '12.0.0-beta.4'
+          install: ''
+
+      - id: control
+        # Same inputs but a valid `install`, so a failure above can be
+        # attributed to the input rather than to the runner or the network.
+        uses: ./
+        with:
+          version: '12.0.0-beta.4'
+          install: require-lockfile
+
+      - name: 'Test: only the invalid values failed'
+        env:
+          OUTCOME: ${{ steps.invalid.outcome }}
+          EMPTY: ${{ steps.empty.outcome }}
+          CONTROL: ${{ steps.control.outcome }}
+        run: |
+          set -e
+          echo "invalid: ${OUTCOME}, empty: ${EMPTY}, control: ${CONTROL}"
+          if [ "${OUTCOME}" != "failure" ]; then
+            echo "Expected an invalid install value to fail the step"; exit 1
+          fi
+          if [ "${EMPTY}" != "failure" ]; then
+            echo "Expected an empty install value to fail the step"; exit 1
+          fi
+          if [ "${CONTROL}" != "success" ]; then
+            echo "Control step failed, so the failure above is not attributable to the input"; exit 1
+          fi
+        shell: bash
+
   no-runtime:
     # No runtime input, no devEngines.runtime. Action installs pnpm only and
     # leaves the runtime outputs empty. With no package.json, `pnpm install`
