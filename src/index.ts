@@ -3,7 +3,13 @@ import restoreCache from './cache-restore'
 import saveCache from './cache-save'
 import getInputs, { Inputs } from './inputs'
 import installPnpm from './install-pnpm'
-import { resolveRuntimeRequest, installRuntime, InstalledRuntime, logSkippedRuntime } from './install-runtime'
+import {
+  resolveRuntimeRequests,
+  installRuntime,
+  InstalledRuntime,
+  keepInstalledRuntimesAuthoritative,
+  logSkippedRuntime,
+} from './install-runtime'
 import setOutputs from './outputs'
 import pnpmInstall from './pnpm-install'
 import pruneStore from './pnpm-store-prune'
@@ -24,21 +30,25 @@ async function runMain() {
   const result = await installPnpm(inputs)
   console.log('Installation Completed!')
 
-  let runtime: InstalledRuntime | undefined
-  const request = resolveRuntimeRequest(inputs)
-  if (request) {
-    runtime = await installRuntime(request, result.binDest)
+  const runtimes: InstalledRuntime[] = []
+  const requests = resolveRuntimeRequests(inputs)
+  for (const request of requests) {
+    const runtime = await installRuntime(request, result.binDest)
     if (runtime === undefined) return
+    runtimes.push(runtime)
+  }
+  if (runtimes.length > 0) {
+    keepInstalledRuntimesAuthoritative(runtimes)
   } else {
     logSkippedRuntime()
   }
 
-  setOutputs(inputs, result.binDest, runtime)
+  setOutputs(inputs, result.binDest, runtimes)
 
   await restoreCache(inputs)
 
   if (inputs.install) {
-    pnpmInstall(inputs)
+    pnpmInstall(inputs, runtimes.length > 0)
   }
 }
 

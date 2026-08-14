@@ -9,7 +9,7 @@ pnpm ships a self-contained release binary — the action downloads it for the r
 >
 > One caveat: pnpm v11 publishes no binary for Intel macOS (`darwin-x64`); use v12 or newer on Intel macOS runners.
 
-If your `package.json` declares `devEngines.runtime`, the action picks up the runtime and version from there automatically — no inputs required.
+If your `package.json` declares `devEngines.runtime`, the action picks up every runtime and version from there automatically — no inputs required.
 
 ## Inputs
 
@@ -17,7 +17,7 @@ If your `package.json` declares `devEngines.runtime`, the action picks up the ru
 |------|-------------|
 | `version` | Version of pnpm to install: an exact version, a semver range (`^12.0.0`), or a dist-tag (`next-12`). Must resolve to v11 or newer. Optional when `packageManager` or `devEngines.packageManager` is set in `package.json`. |
 | `dest` | Where to store pnpm files. Defaults to `~/setup-pnpm`. |
-| `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime` in `package.json`, then to `lts` (for `node`) / `latest`. If the input itself is omitted, the action reads `devEngines.runtime` from `package.json`. |
+| `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime` in `package.json`, then to `lts` (for `node`) / `latest`. If the input itself is omitted, the action installs every entry in `devEngines.runtime` from `package.json`. |
 | `cache` | Cache the pnpm store directory. Default: `false`. |
 | `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Default: `pnpm-lock.yaml`. |
 | `package-json-file` | Path to `package.json` (relative to `GITHUB_WORKSPACE`). Default: `package.json`. |
@@ -30,8 +30,9 @@ If your `package.json` declares `devEngines.runtime`, the action picks up the ru
 |------|-------------|
 | `dest` | Expanded path of `dest`. |
 | `bin-dest` | Directory containing the `pnpm` / `pnpx` binaries. |
-| `runtime-name` | Name of the installed runtime, or empty string if none was installed. |
-| `runtime-version` | Resolved version of the installed runtime, or empty string if none was installed. |
+| `runtime-name` | Name of the first installed runtime, or empty string if none was installed. |
+| `runtime-version` | Resolved version of the first installed runtime, or empty string if none was installed. |
+| `runtimes` | JSON array of every installed runtime in declaration order, as `{ "name": string, "version": string }` objects. Returns `[]` when none were installed. |
 
 ## Usage
 
@@ -112,8 +113,8 @@ For jobs that only need pnpm itself — e.g. `pnpm audit`, lockfile-only regener
 
 1. The action resolves the requested version (exact, range, or dist-tag) against the npm registry, then downloads the matching self-contained release archive for the runner's platform (`pnpm-<os>-<arch>.tar.gz`, or `pnpm-win32-<arch>.zip` on Windows) from pnpm's GitHub releases. It verifies the archive against the SHA-256 digest GitHub publishes for the asset, extracts the `pnpm` executable (and, for pnpm builds that need it, its bundled `dist/`), and links the `pnpx`, `pn`, and `pnx` aliases into `dest`. No Node.js or npm is involved.
 2. `PNPM_HOME` is exported and `dest` plus `$PNPM_HOME/bin` are added to `PATH`.
-3. The action runs `pnpm runtime set <name> <version> -g`, which downloads the requested runtime into `$PNPM_HOME/bin` — making `node`, `bun`, or `deno` available to later workflow steps. It then exports `PNPM_CONFIG_GLOBAL_SHIMS={"<name>":false}` so that runtime stays the one later steps get; see [Context-aware global shims](#context-aware-global-shims).
-4. If a `package.json` exists in the workspace, the action runs `pnpm install` (unless `install: false` is set). When the `runtime` input is set, `--no-runtime` is appended so the just-installed runtime isn't shadowed by a different version declared in `devEngines.runtime`.
+3. The action runs `pnpm runtime set <name> <version> -g` for every requested runtime, which downloads them into `$PNPM_HOME/bin` and makes them available to later workflow steps. It then disables context-aware shims for every installed runtime; see [Context-aware global shims](#context-aware-global-shims).
+4. If a `package.json` exists in the workspace, the action runs `pnpm install` (unless `install: false` is set). When runtimes were installed, `--no-runtime` is appended because the action has already processed `devEngines.runtime`.
 
 ### Context-aware global shims
 

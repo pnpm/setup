@@ -23,17 +23,17 @@ export interface RuntimeRequest {
   readonly version: string
 }
 
-export function resolveRuntimeRequest(inputs: Inputs): RuntimeRequest | undefined {
+export function resolveRuntimeRequests(inputs: Inputs): RuntimeRequest[] {
   // Explicit `runtime` input always wins. `runtime.version` falls back to
   // devEngines.runtime if not provided — useful for matrix workflows that
   // pick the runtime but keep the version pinned in the manifest.
   if (inputs.runtime) {
     const { name } = inputs.runtime
     const version = inputs.runtime.version ?? readDevEngineVersion(inputs, name) ?? defaultVersionFor(name)
-    return { name, version }
+    return [{ name, version }]
   }
 
-  return readFirstDevEngineRuntime(inputs)
+  return readDevEngineRuntimes(inputs)
 }
 
 export async function installRuntime(
@@ -55,7 +55,6 @@ export async function installRuntime(
     setFailed(`pnpm runtime set ${request.name} ${request.version} -g exited with code ${exitCode}`)
     return undefined
   }
-  keepInstalledRuntimeAuthoritative(request.name)
   return { name: request.name, version: request.version }
 }
 
@@ -66,18 +65,24 @@ export async function installRuntime(
  * the version this action was asked to install — a matrix job asking for
  * `node@22` would run the repository's pinned version instead — and even
  * when the two agree it materializes a second copy outside `$PNPM_HOME`.
- * Turn the shim off for the runtime we installed, leaving every other
+ * Turn the shims off for the runtimes we installed, leaving every other
  * runtime at pnpm's defaults. A value the workflow set itself always wins.
  */
-function keepInstalledRuntimeAuthoritative(name: RuntimeName) {
+export function keepInstalledRuntimesAuthoritative(runtimes: readonly InstalledRuntime[]) {
+  if (runtimes.length === 0) return
+
   // An empty value counts as unset, the same rule pnpm applies when it reads
-  // these — stepping aside for a value pnpm ignores would leave the shim on.
+  // these — stepping aside for a value pnpm ignores would leave the shims on.
   const configured = GLOBAL_SHIMS_ENV_NAMES.find(envName => process.env[envName])
   if (configured) {
     info(`\`${configured}\` is already set; leaving pnpm's context-aware shims as configured.`)
     return
   }
-  exportVariable(GLOBAL_SHIMS_ENV_NAMES[0], JSON.stringify({ [name]: false }))
+
+  exportVariable(
+    GLOBAL_SHIMS_ENV_NAMES[0],
+    JSON.stringify(Object.fromEntries(runtimes.map(runtime => [runtime.name, false]))),
+  )
 }
 
 export function logSkippedRuntime() {
@@ -119,13 +124,11 @@ function readDevEngineVersion(inputs: Inputs, name: RuntimeName): string | undef
   return match?.version
 }
 
-function readFirstDevEngineRuntime(inputs: Inputs): RuntimeRequest | undefined {
-  for (const entry of readDevEngineEntries(inputs)) {
-    if (!entry.name || !entry.version) continue
-    if (!SUPPORTED_RUNTIMES.has(entry.name as RuntimeName)) continue
-    return { name: entry.name as RuntimeName, version: entry.version }
-  }
-  return undefined
+function readDevEngineRuntimes(inputs: Inputs): RuntimeRequest[] {
+  return readDevEngineEntries(inputs).flatMap(entry => {
+    if (!entry.name || !entry.version || !SUPPORTED_RUNTIMES.has(entry.name as RuntimeName)) return []
+    return [{ name: entry.name as RuntimeName, version: entry.version }]
+  })
 }
 
 function runPnpm(binDest: string, args: string[]): Promise<number> {
