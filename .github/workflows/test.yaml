@@ -231,6 +231,33 @@ jobs:
           esac
         shell: bash
 
+  version-file:
+    # A shared .tool-versions can pin pnpm alongside the project's runtimes.
+    name: 'Version from .tool-versions'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create .tool-versions
+        run: |
+          printf '%s\n' 'nodejs 22.18.0' 'pnpm 11.17.0' > .tool-versions
+
+      - uses: ./
+        with:
+          version-file: .tool-versions
+          install: false
+
+      - name: 'Test: pnpm version matches .tool-versions'
+        run: |
+          set -e
+          actual="$(pnpm --version)"
+          echo "pnpm --version: ${actual}"
+          if [ "${actual}" != "11.17.0" ]; then
+            echo "Expected pnpm 11.17.0, got ${actual}"
+            exit 1
+          fi
+        shell: bash
+
   runtime-node:
     # Explicit runtime input across OSes. Asserts node binary is on PATH and
     # the action's outputs reflect what was installed.

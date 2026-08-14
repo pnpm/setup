@@ -16,6 +16,7 @@ If your `package.json` declares `devEngines.runtime`, the action picks up the ru
 | Name | Description |
 |------|-------------|
 | `version` | Version of pnpm to install: an exact version, a semver range (`^12.0.0`), or a dist-tag (`next-12`). Must resolve to v11 or newer. Optional when `packageManager` or `devEngines.packageManager` is set in `package.json`. |
+| `version-file` | File containing the pnpm version to install, resolved relative to the repository root. Supports a plain version file and the `pnpm` entry in `.tool-versions`. When both `version` and `version-file` are set, `version` is used. |
 | `dest` | Where to store pnpm files. Defaults to `~/setup-pnpm`. |
 | `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime` in `package.json`, then to `lts` (for `node`) / `latest`. If the input itself is omitted, the action reads `devEngines.runtime` from `package.json`. |
 | `cache` | Cache the pnpm store directory. Default: `false`. |
@@ -76,6 +77,23 @@ jobs:
           runtime: node@${{ matrix.node }}
       - run: pnpm test
 ```
+
+### Install the pnpm version from `.tool-versions`
+
+```text
+# .tool-versions
+nodejs 24.6.0
+pnpm 12.0.0-rc.2
+```
+
+```yaml
+- uses: actions/checkout@v7
+- uses: pnpm/setup@v2
+  with:
+    version-file: .tool-versions
+```
+
+The first version on the `pnpm` line is used when the entry contains multiple versions. A plain version file such as `.pnpm-version` may contain any value accepted by `version`, including a semver range or dist-tag.
 
 ### Install Bun or Deno
 

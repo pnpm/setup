@@ -12,6 +12,7 @@ export interface RuntimeInput {
 
 export interface Inputs {
   readonly version?: string
+  readonly versionFile?: string
   readonly dest: string
   readonly cache: boolean
   readonly cacheDependencyPath: string
@@ -52,7 +53,8 @@ function isSupportedRuntime(name: string): name is RuntimeName {
 }
 
 export const getInputs = (): Inputs => ({
-  version: getInput('version'),
+  version: getInput('version') || undefined,
+  versionFile: getInput('version-file') || undefined,
   dest: parseInputPath('dest'),
   cache: getBooleanInput('cache'),
   cacheDependencyPath: parseInputPath('cache-dependency-path'),

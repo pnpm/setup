@@ -1,4 +1,4 @@
-import { addPath, exportVariable, info } from '@actions/core'
+import { addPath, exportVariable, info, warning } from '@actions/core'
 import { spawn } from 'child_process'
 import { readFileSync } from 'fs'
 import { mkdir, rm } from 'fs/promises'
@@ -6,6 +6,7 @@ import path from 'path'
 import util from 'util'
 import { parse as parseYaml } from 'yaml'
 import { Inputs } from '../inputs'
+import { getPnpmVersionFromFile } from '../version-file'
 import { downloadPnpm, resolvePnpm } from './download'
 
 export interface SelfInstallerResult {
@@ -14,9 +15,9 @@ export interface SelfInstallerResult {
 }
 
 export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerResult> {
-  const { version, dest, packageJsonFile } = inputs
+  const { version, versionFile, dest, packageJsonFile } = inputs
 
-  const spec = readTargetVersion({ version, packageJsonFile })
+  const spec = readTargetVersion({ version, versionFile, packageJsonFile })
   const resolved = await resolvePnpm(spec)
   info(`Downloading pnpm ${resolved.version} from the npm registry`)
 
@@ -47,10 +48,27 @@ export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerRes
 
 function readTargetVersion(opts: {
   readonly version?: string | undefined
+  readonly versionFile?: string | undefined
   readonly packageJsonFile: string
 }): string {
-  const { version, packageJsonFile } = opts
+  const { version, versionFile, packageJsonFile } = opts
   const { GITHUB_WORKSPACE } = process.env
+
+  if (version && versionFile) {
+    warning('Both version and version-file inputs are specified; only version will be used.')
+  }
+
+  let requestedVersion = version
+  if (!requestedVersion && versionFile) {
+    if (!GITHUB_WORKSPACE) {
+      throw new Error(`No workspace is found.
+If you've intended to let pnpm/setup read the pnpm version from a version file,
+please run actions/checkout before pnpm/setup.`)
+    }
+
+    requestedVersion = getPnpmVersionFromFile(path.join(GITHUB_WORKSPACE, versionFile))
+    info(`Resolved ${versionFile} as ${requestedVersion}`)
+  }
 
   let packageManager: string | undefined
   let devEngines: { packageManager?: { name?: string; version?: string } } | undefined
@@ -76,15 +94,18 @@ function readTargetVersion(opts: {
       ? packageManager.slice('pnpm@'.length).split('+')[0]
       : undefined
 
-  if (version) {
-    if (packageManagerVersion && packageManagerVersion !== version) {
+  if (requestedVersion) {
+    if (packageManagerVersion && packageManagerVersion !== requestedVersion) {
+      const configuredAt = version
+        ? `version ${requestedVersion} in the GitHub Action config with the key "version"`
+        : `version ${requestedVersion} in the version file "${versionFile}"`
       throw new Error(`Multiple versions of pnpm specified:
-  - version ${version} in the GitHub Action config with the key "version"
+  - ${configuredAt}
   - version ${packageManager} in the package.json with the key "packageManager"
 Remove one of these versions to avoid version mismatch errors like ERR_PNPM_BAD_PM_VERSION`)
     }
 
-    return version
+    return requestedVersion
   }
 
   // devEngines.packageManager takes priority over packageManager, matching
@@ -108,6 +129,7 @@ Otherwise, please specify the pnpm version in the action configuration.`)
   throw new Error(`No pnpm version is specified.
 Please specify it by one of the following ways:
   - in the GitHub Action config with the key "version"
+  - in a file specified by the GitHub Action config key "version-file"
   - in the package.json with the key "packageManager"
   - in the package.json with the key "devEngines.packageManager"`)
 }

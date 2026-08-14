@@ -21,6 +21,12 @@ jobs:
           version: 11
           run_install: true
 
+      - name: Run tests
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm typecheck
+
       - name: Build dist/index.js
         run: pnpm run build
 

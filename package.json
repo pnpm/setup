@@ -3,6 +3,8 @@
   "scripts": {
     "build:bundle": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=cjs --minify --outfile=dist/index.js",
     "build": "pnpm run build:bundle",
+    "test": "esbuild tests/version-file.test.ts --bundle --platform=node --target=node22 --format=cjs --outfile=temp/version-file.test.cjs && node --test temp/version-file.test.cjs",
+    "typecheck": "tsc",
     "start": "pnpm run build && sh ./run.sh"
   },
   "dependencies": {

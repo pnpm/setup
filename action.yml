@@ -11,8 +11,16 @@ inputs:
       to pnpm v11 or newer — the action downloads pnpm's native per-platform
       executable directly, without needing Node.js or npm.
 
-      When omitted, the version is read from `devEngines.packageManager` or
-      `packageManager` in the project's package.json.
+      When omitted, the version is read from `version-file`,
+      `devEngines.packageManager`, or `packageManager`.
+    required: false
+  version-file:
+    description: |
+      File containing the pnpm version to install. The path is resolved
+      relative to the repository root. Supports a plain version file and the
+      `pnpm` entry in `.tool-versions`.
+
+      When both `version` and `version-file` are provided, `version` is used.
     required: false
   dest:
     description: Where to store pnpm files
