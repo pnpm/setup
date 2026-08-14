@@ -321,7 +321,7 @@ jobs:
 
   runtime-from-devengines:
     # No `runtime` input — the action should pick up devEngines.runtime from
-    # package.json and install it. Also asserts that `pnpm install` runs by
+    # package.json and install every entry. Also asserts that `pnpm install` runs by
     # default when a manifest is present.
     name: 'Runtime from devEngines.runtime'
     runs-on: ubuntu-latest
@@ -337,7 +337,11 @@ jobs:
           {
             "packageManager": "pnpm@12.0.0-beta.4",
             "devEngines": {
-              "runtime": { "name": "node", "version": "^22.0.0", "onFail": "download" }
+              "runtime": [
+                { "name": "bun", "version": "1.3.12", "onFail": "warn" },
+                { "name": "node", "version": "24", "onFail": "warn" },
+                { "name": "bun", "version": "1.3.13", "onFail": "warn" }
+              ]
             },
             "dependencies": {
               "is-odd": "3.0.1"
@@ -349,25 +353,38 @@ jobs:
       - id: pnpm
         uses: ./
 
-      - name: 'Test: node 22 is installed and dependencies are resolved'
+      - name: 'Test: Bun and Node are installed and dependencies are resolved'
         env:
           OUT_NAME: ${{ steps.pnpm.outputs.runtime-name }}
           OUT_VERSION: ${{ steps.pnpm.outputs.runtime-version }}
+          OUT_RUNTIMES: ${{ steps.pnpm.outputs.runtimes }}
         run: |
           set -e
+          which bun
+          bun_actual="$(bun --version)"
+          echo "bun --version: ${bun_actual}"
+          if [ "${bun_actual}" != "1.3.13" ]; then
+            echo "Expected bun 1.3.13, got ${bun_actual}"
+            exit 1
+          fi
           which node
           actual="$(node --version)"
           echo "node --version: ${actual}"
           case "${actual}" in
-            v22.*) ;;
-            *) echo "Expected node v22.x, got ${actual}"; exit 1 ;;
+            v24.*) ;;
+            *) echo "Expected node v24.x, got ${actual}"; exit 1 ;;
           esac
-          if [ "${OUT_NAME}" != "node" ]; then
-            echo "Expected outputs.runtime-name=node, got ${OUT_NAME}"
+          if [ "${OUT_NAME}" != "bun" ]; then
+            echo "Expected outputs.runtime-name=bun, got ${OUT_NAME}"
             exit 1
           fi
-          if [ "${OUT_VERSION}" != "^22.0.0" ]; then
-            echo "Expected outputs.runtime-version=^22.0.0, got ${OUT_VERSION}"
+          if [ "${OUT_VERSION}" != "1.3.13" ]; then
+            echo "Expected outputs.runtime-version=1.3.13, got ${OUT_VERSION}"
+            exit 1
+          fi
+          expected='[{"name":"bun","version":"1.3.13"},{"name":"node","version":"24"}]'
+          if [ "${OUT_RUNTIMES}" != "${expected}" ]; then
+            echo "Expected outputs.runtimes=${expected}, got ${OUT_RUNTIMES}"
             exit 1
           fi
           # `pnpm install` should have run automatically — node_modules must exist.
@@ -614,6 +631,7 @@ jobs:
         env:
           OUT_NAME: ${{ steps.pnpm.outputs.runtime-name }}
           OUT_VERSION: ${{ steps.pnpm.outputs.runtime-version }}
+          OUT_RUNTIMES: ${{ steps.pnpm.outputs.runtimes }}
         run: |
           set -e
           which pnpm
@@ -624,6 +642,10 @@ jobs:
           fi
           if [ -n "${OUT_VERSION}" ]; then
             echo "Expected outputs.runtime-version to be empty, got '${OUT_VERSION}'"
+            exit 1
+          fi
+          if [ "${OUT_RUNTIMES}" != "[]" ]; then
+            echo "Expected outputs.runtimes=[], got '${OUT_RUNTIMES}'"
             exit 1
           fi
         shell: bash

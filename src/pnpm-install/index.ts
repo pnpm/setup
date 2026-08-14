@@ -4,7 +4,7 @@ import { existsSync } from 'fs'
 import path from 'path'
 import { Inputs } from '../inputs'
 
-export function runPnpmInstall(inputs: Inputs) {
+export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs.runtime)) {
   // Skip if there's no package.json in the workspace — the action is also
   // useful for jobs that just want pnpm + a runtime on PATH (e.g. running
   // global tooling, ad-hoc scripts) and have no manifest to install.
@@ -19,12 +19,10 @@ export function runPnpmInstall(inputs: Inputs) {
     return
   }
 
-  // When the user pinned a runtime explicitly via the `runtime` input, we've
-  // already installed it via `pnpm runtime set` above. Pass `--no-runtime`
-  // to `pnpm install` so the explicit runtime isn't shadowed by a different
-  // version from `devEngines.runtime` on the same install.
+  // The requested runtimes were already installed via `pnpm runtime set`.
+  // Prevent `pnpm install` from processing devEngines.runtime again.
   const args = ['install']
-  if (inputs.runtime) {
+  if (runtimeInstalled) {
     args.push('--no-runtime')
   }
 

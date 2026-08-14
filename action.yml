@@ -29,9 +29,9 @@ inputs:
       declared in `devEngines.runtime` for the same name, or to `lts` (for
       `node`) / `latest` for others.
 
-      If this input is omitted entirely, the action reads `devEngines.runtime`
-      from the project's package.json. If that is also missing, no runtime is
-      installed.
+      If this input is omitted entirely, the action installs every runtime in
+      `devEngines.runtime` from the project's package.json. In case of duplicates,
+      the last declared version wins. If the field is missing, no runtime is installed.
 
       Whenever a runtime is installed, the action exports
       `PNPM_CONFIG_GLOBAL_SHIMS` with that runtime's context-aware shim
@@ -55,10 +55,9 @@ inputs:
       Whether to run `pnpm install` after pnpm and the runtime are set up.
 
       When set to `true` (the default), the action runs `pnpm install` in the
-      workspace when a package.json is present. When the `runtime` input is
-      also set, `--no-runtime` is appended automatically so the installed
-      runtime isn't shadowed by a different version declared in
-      `devEngines.runtime`.
+      workspace when a package.json is present. When runtimes are installed,
+      `--no-runtime` is appended automatically because the action has already
+      processed `devEngines.runtime`.
 
       Set to `false` to skip the install step — useful for jobs that only
       need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration).
@@ -78,9 +77,11 @@ outputs:
   bin-dest:
     description: Location of `pnpm` and `pnpx` command
   runtime-name:
-    description: Name of the installed runtime (`node`, `bun`, or `deno`), or empty if none was installed
+    description: Name of the first installed runtime (`node`, `bun`, or `deno`), or empty if none was installed
   runtime-version:
-    description: Resolved version of the installed runtime, or empty if none was installed
+    description: Resolved version of the first installed runtime, or empty if none was installed
+  runtimes:
+    description: JSON array of installed runtimes, each containing `name` and `version`
 runs:
   using: node24
   main: dist/index.js
