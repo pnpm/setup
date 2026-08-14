@@ -1,4 +1,4 @@
-import { exportVariable, setFailed, startGroup, endGroup, info } from '@actions/core'
+import { exportVariable, setFailed, startGroup, endGroup, info, warning } from '@actions/core'
 import { spawn } from 'child_process'
 import { readFileSync } from 'fs'
 import path from 'path'
@@ -125,10 +125,20 @@ function readDevEngineVersion(inputs: Inputs, name: RuntimeName): string | undef
 }
 
 function readDevEngineRuntimes(inputs: Inputs): RuntimeRequest[] {
-  return readDevEngineEntries(inputs).flatMap(entry => {
-    if (!entry.name || !entry.version || !SUPPORTED_RUNTIMES.has(entry.name as RuntimeName)) return []
-    return [{ name: entry.name as RuntimeName, version: entry.version }]
-  })
+  const runtimes = new Map<RuntimeName, RuntimeRequest>()
+  for (const entry of readDevEngineEntries(inputs)) {
+    if (!entry.name || !entry.version || !SUPPORTED_RUNTIMES.has(entry.name as RuntimeName)) continue
+
+    const name = entry.name as RuntimeName
+    const previous = runtimes.get(name)
+    if (previous) {
+      warning(
+        `Duplicate ${name} runtime versions declared in devEngines.runtime (${previous.version} and ${entry.version}); using the last declared version ${entry.version}.`,
+      )
+    }
+    runtimes.set(name, { name, version: entry.version })
+  }
+  return [...runtimes.values()]
 }
 
 function runPnpm(binDest: string, args: string[]): Promise<number> {

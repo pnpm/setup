@@ -30,8 +30,8 @@ inputs:
       `node`) / `latest` for others.
 
       If this input is omitted entirely, the action installs every runtime in
-      `devEngines.runtime` from the project's package.json. If that is also
-      missing, no runtime is installed.
+      `devEngines.runtime` from the project's package.json. In case of duplicates,
+      the last declared version wins. If the field is missing, no runtime is installed.
 
       Whenever a runtime is installed, the action exports
       `PNPM_CONFIG_GLOBAL_SHIMS` with that runtime's context-aware shim

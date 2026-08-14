@@ -11,6 +11,8 @@ pnpm ships a self-contained release binary — the action downloads it for the r
 
 If your `package.json` declares `devEngines.runtime`, the action picks up every runtime and version from there automatically — no inputs required.
 
+Only one version of each runtime can be installed globally. If a runtime name is declared more than once, the action emits a GitHub warning annotation and installs the last declared version while retaining the position of its first declaration.
+
 ## Inputs
 
 | Name | Description |
