@@ -18,7 +18,7 @@ If your `package.json` declares `devEngines.runtime`, the action picks up the ru
 | `version` | Version of pnpm to install: an exact version, a semver range (`^12.0.0`), or a dist-tag (`next-12`). Must resolve to v11 or newer. Optional when `packageManager` or `devEngines.packageManager` is set in `package.json`. |
 | `dest` | Where to store pnpm files. Defaults to `~/setup-pnpm`. |
 | `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime` in `package.json`, then to `lts` (for `node`) / `latest`. If the input itself is omitted, the action reads `devEngines.runtime` from `package.json`. |
-| `cache` | Cache the pnpm store directory. Default: `false`. |
+| `cache` | Cache the pnpm store directory and restore it before installing the runtime. Default: `false`. |
 | `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Default: `pnpm-lock.yaml`. |
 | `package-json-file` | Path to `package.json` (relative to `GITHUB_WORKSPACE`). Default: `package.json`. |
 | `install` | Run `pnpm install` after setup. Default: `true`. Set to `false` for jobs that only need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration). |
@@ -32,6 +32,7 @@ If your `package.json` declares `devEngines.runtime`, the action picks up the ru
 | `bin-dest` | Directory containing the `pnpm` / `pnpx` binaries. |
 | `runtime-name` | Name of the installed runtime, or empty string if none was installed. |
 | `runtime-version` | Resolved version of the installed runtime, or empty string if none was installed. |
+| `cache-hit` | Whether the pnpm store cache matched the exact primary key. |
 
 ## Usage
 
@@ -96,6 +97,10 @@ jobs:
   with:
     cache: true
 ```
+
+The cache is restored before the runtime is installed, so a cached runtime does
+not need to be downloaded again. Cache keys include the requested runtime name
+and version.
 
 ### Skip `pnpm install`
 

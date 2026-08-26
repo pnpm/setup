@@ -39,7 +39,7 @@ inputs:
       project pins. Set the variable in the workflow to override.
     required: false
   cache:
-    description: Whether to cache the pnpm store directory
+    description: Whether to cache the pnpm store directory and restore it before installing the runtime
     required: false
     default: 'false'
   cache-dependency-path:
@@ -81,6 +81,8 @@ outputs:
     description: Name of the installed runtime (`node`, `bun`, or `deno`), or empty if none was installed
   runtime-version:
     description: Resolved version of the installed runtime, or empty if none was installed
+  cache-hit:
+    description: Whether the pnpm store cache matched the exact primary key
 runs:
   using: node24
   main: dist/index.js

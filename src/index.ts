@@ -24,8 +24,10 @@ async function runMain() {
   const result = await installPnpm(inputs)
   console.log('Installation Completed!')
 
-  let runtime: InstalledRuntime | undefined
   const request = resolveRuntimeRequest(inputs)
+  await restoreCache(inputs, request)
+
+  let runtime: InstalledRuntime | undefined
   if (request) {
     runtime = await installRuntime(request, result.binDest)
     if (runtime === undefined) return
@@ -34,8 +36,6 @@ async function runMain() {
   }
 
   setOutputs(inputs, result.binDest, runtime)
-
-  await restoreCache(inputs)
 
   if (inputs.install) {
     pnpmInstall(inputs)
