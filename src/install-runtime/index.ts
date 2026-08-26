@@ -59,6 +59,18 @@ export async function installRuntime(
   return { name: request.name, version: request.version }
 }
 
+export async function getInstalledRuntimeVersion(name: RuntimeName, binDest: string): Promise<string> {
+  const stdout = await runPnpmForOutput(binDest, ['list', '--global', '--json', '--depth', '-1'])
+  const listing = JSON.parse(stdout) as Array<{
+    readonly dependencies?: Record<string, { readonly version?: string }>
+  }>
+  const version = listing[0]?.dependencies?.[name]?.version
+  if (!version) {
+    throw new Error(`Unable to determine the installed ${name} version`)
+  }
+  return version
+}
+
 /**
  * pnpm 12 links global runtime bins as context-aware shims: running `node`
  * from `$PNPM_HOME/bin` inside a project switches to the version that
@@ -136,6 +148,28 @@ function runPnpm(binDest: string, args: string[]): Promise<number> {
     })
     cp.on('error', reject)
     cp.on('close', resolve)
+  })
+}
+
+function runPnpmForOutput(binDest: string, args: string[]): Promise<string> {
+  const pnpmBin = path.join(binDest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
+  return new Promise<string>((resolve, reject) => {
+    const cp = spawn(pnpmBin, args, {
+      stdio: ['ignore', 'pipe', 'inherit'],
+    })
+    let stdout = ''
+    cp.stdout.setEncoding('utf8')
+    cp.stdout.on('data', chunk => {
+      stdout += chunk
+    })
+    cp.on('error', reject)
+    cp.on('close', code => {
+      if (code === 0) {
+        resolve(stdout)
+      } else {
+        reject(new Error(`pnpm ${args.join(' ')} exited with code ${code}`))
+      }
+    })
   })
 }
 

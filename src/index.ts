@@ -1,9 +1,15 @@
 import { setFailed, saveState, getState } from '@actions/core'
-import restoreCache from './cache-restore'
+import restoreCache, { finalizeCache } from './cache-restore'
 import saveCache from './cache-save'
 import getInputs, { Inputs } from './inputs'
 import installPnpm from './install-pnpm'
-import { resolveRuntimeRequest, installRuntime, InstalledRuntime, logSkippedRuntime } from './install-runtime'
+import {
+  getInstalledRuntimeVersion,
+  resolveRuntimeRequest,
+  installRuntime,
+  InstalledRuntime,
+  logSkippedRuntime,
+} from './install-runtime'
 import setOutputs from './outputs'
 import pnpmInstall from './pnpm-install'
 import pruneStore from './pnpm-store-prune'
@@ -25,7 +31,7 @@ async function runMain() {
   console.log('Installation Completed!')
 
   const request = resolveRuntimeRequest(inputs)
-  await restoreCache(inputs, request)
+  const restoredCache = await restoreCache(inputs, request)
 
   let runtime: InstalledRuntime | undefined
   if (request) {
@@ -33,6 +39,13 @@ async function runMain() {
     if (runtime === undefined) return
   } else {
     logSkippedRuntime()
+  }
+
+  if (restoredCache) {
+    const resolvedRuntimeVersion = request
+      ? await getInstalledRuntimeVersion(request.name, result.binDest)
+      : undefined
+    finalizeCache(restoredCache, resolvedRuntimeVersion)
   }
 
   setOutputs(inputs, result.binDest, runtime)

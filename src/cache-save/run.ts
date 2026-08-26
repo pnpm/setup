@@ -3,7 +3,7 @@ import { getState, info } from '@actions/core'
 
 export async function runSaveCache() {
   const state = getState('cache_restored_key')
-  const primaryKey = getState('cache_primary_key')
+  const primaryKey = getState('cache_primary_key') || getState('cache_provisional_key')
   const cachePath = getState('cache_path')
 
   if (primaryKey === state) {

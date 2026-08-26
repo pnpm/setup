@@ -99,8 +99,8 @@ jobs:
 ```
 
 The cache is restored before the runtime is installed, so a cached runtime does
-not need to be downloaded again. Cache keys include the requested runtime name
-and version.
+not need to be downloaded again. Cache keys include both the requested runtime
+selector and the actual installed version.
 
 ### Skip `pnpm install`
 

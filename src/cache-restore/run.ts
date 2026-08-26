@@ -2,12 +2,21 @@ import { restoreCache } from '@actions/cache'
 import { debug, info, saveState, setOutput } from '@actions/core'
 import { getExecOutput } from '@actions/exec'
 import { hashFiles } from '@actions/glob'
-import { createHash } from 'crypto'
 import os from 'os'
 import { Inputs } from '../inputs'
 import { RuntimeRequest } from '../install-runtime'
+import { getCacheKeyPrefix, getPrimaryCacheKey } from './keys'
 
-export async function runRestoreCache(inputs: Inputs, runtime: RuntimeRequest | undefined) {
+export interface RestoredCache {
+  readonly fileHash: string
+  readonly keyPrefix: string
+  readonly restoredKey: string | undefined
+}
+
+export async function runRestoreCache(
+  inputs: Inputs,
+  runtime: RuntimeRequest | undefined,
+): Promise<RestoredCache> {
   const cachePath = await getCacheDirectory()
   saveState('cache_path', cachePath)
 
@@ -16,31 +25,36 @@ export async function runRestoreCache(inputs: Inputs, runtime: RuntimeRequest | 
     throw new Error('Some specified paths were not resolved, unable to cache dependencies.')
   }
 
-  const keyPrefix = `pnpm-cache-${process.env.RUNNER_OS}-${os.arch()}-${getRuntimeCacheKey(runtime)}-`
-  const primaryKey = `${keyPrefix}${fileHash}`
-  debug(`Primary key is ${primaryKey}`)
-  saveState('cache_primary_key', primaryKey)
+  const keyPrefix = getCacheKeyPrefix(process.env.RUNNER_OS, os.arch(), runtime)
+  const provisionalKey = getPrimaryCacheKey(keyPrefix, fileHash)
+  debug(`Provisional cache key is ${provisionalKey}`)
+  saveState('cache_provisional_key', provisionalKey)
 
   // We don't need to download everything again if only one dependency changed
   // We can still re-use previous store to cache the rest of the unchanged dependencies
   const restoreKeys = [keyPrefix]
 
-  let cacheKey = await restoreCache([cachePath], primaryKey, restoreKeys)
+  const restoredKey = await restoreCache([cachePath], provisionalKey, restoreKeys)
 
-  setOutput('cache-hit', cacheKey === primaryKey)
-
-  if (!cacheKey) {
+  if (!restoredKey) {
     info(`Cache is not found`)
-    return
+    return { fileHash, keyPrefix, restoredKey: undefined }
   }
 
-  saveState('cache_restored_key', cacheKey)
-  info(`Cache restored from key: ${cacheKey}`)
+  saveState('cache_restored_key', restoredKey)
+  info(`Cache restored from key: ${restoredKey}`)
+  return { fileHash, keyPrefix, restoredKey }
 }
 
-function getRuntimeCacheKey(runtime: RuntimeRequest | undefined): string {
-  if (!runtime) return 'no-runtime'
-  return createHash('sha256').update(`${runtime.name}@${runtime.version}`).digest('hex')
+export function finalizeCache(cache: RestoredCache, resolvedRuntimeVersion: string | undefined) {
+  const primaryKey = getPrimaryCacheKey(
+    cache.keyPrefix,
+    cache.fileHash,
+    resolvedRuntimeVersion,
+  )
+  debug(`Primary key is ${primaryKey}`)
+  saveState('cache_primary_key', primaryKey)
+  setOutput('cache-hit', cache.restoredKey === primaryKey)
 }
 
 async function getCacheDirectory() {
