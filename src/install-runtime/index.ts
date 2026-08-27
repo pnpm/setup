@@ -60,7 +60,7 @@ export async function installRuntime(
 }
 
 export async function getInstalledRuntimeVersion(name: RuntimeName, binDest: string): Promise<string> {
-  const stdout = await runPnpmForOutput(binDest, ['list', '--global', '--json', '--depth', '-1'])
+  const stdout = await runPnpmForOutput(binDest, ['list', '--global', '--json', '--depth', '0'])
   const listing = JSON.parse(stdout) as Array<{
     readonly dependencies?: Record<string, { readonly version?: string }>
   }>
