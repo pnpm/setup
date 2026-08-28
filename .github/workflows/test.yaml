@@ -870,3 +870,97 @@ jobs:
           fi
         shell: bash
 
+  require-lockfile:
+    # `require-lockfile` installs against an existing lockfile and fails when
+    # there is none — the case pnpm's CI default leaves open, since a plain
+    # install resolves from the registry and exits 0 instead.
+    name: 'require-lockfile'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up a manifest with a matching lockfile
+        run: |
+          set -e
+          rm -f pnpm-lock.yaml
+          cat > package.json <<'EOF'
+          {
+            "packageManager": "pnpm@12.0.0",
+            "dependencies": {
+              "is-odd": "3.0.1"
+            }
+          }
+          EOF
+        shell: bash
+
+      - name: Put pnpm on PATH without installing
+        uses: ./
+        with:
+          version: '12.0.0'
+          install: false
+
+      - name: Write the lockfile and record its checksum
+        run: |
+          set -e
+          pnpm install --lockfile-only
+          sha256sum pnpm-lock.yaml > lockfile.sha256
+        shell: bash
+
+      - uses: ./
+        with:
+          version: '12.0.0'
+          require-lockfile: true
+
+      - name: 'Test: installed from the lockfile, which is untouched'
+        run: |
+          set -e
+          if [ ! -d node_modules/is-odd ]; then
+            echo "Expected require-lockfile to populate node_modules/is-odd"; exit 1
+          fi
+          if ! sha256sum --check --status lockfile.sha256; then
+            echo "Expected a successful require-lockfile install to leave the lockfile alone"; exit 1
+          fi
+        shell: bash
+
+      - name: Remove the lockfile entirely
+        run: rm -f pnpm-lock.yaml
+        shell: bash
+
+      - id: missing
+        continue-on-error: true
+        uses: ./
+        with:
+          version: '12.0.0'
+          require-lockfile: true
+
+      - name: 'Test: a missing lockfile failed the step before pnpm ran'
+        env:
+          OUTCOME: ${{ steps.missing.outcome }}
+        run: |
+          set -e
+          echo "outcome: ${OUTCOME}"
+          if [ "${OUTCOME}" != "failure" ]; then
+            echo "Expected require-lockfile to fail when no lockfile exists"; exit 1
+          fi
+        shell: bash
+
+      - name: 'Test: without require-lockfile the same state installs and writes one'
+        # The contrast the input exists for: pnpm's CI default does not require
+        # a lockfile, so this succeeds where the step above failed.
+        run: |
+          set -e
+          rm -f pnpm-lock.yaml
+        shell: bash
+
+      - uses: ./
+        with:
+          version: '12.0.0'
+
+      - name: 'Test: a plain install wrote the lockfile and succeeded'
+        run: |
+          set -e
+          if [ ! -f pnpm-lock.yaml ]; then
+            echo "Expected a plain install to write a lockfile"; exit 1
+          fi
+        shell: bash
+

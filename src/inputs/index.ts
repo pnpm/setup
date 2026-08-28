@@ -23,6 +23,8 @@ export interface Inputs {
   readonly packageJsonFile: string
   readonly runtime?: RuntimeInput
   readonly install: boolean
+  /** Whether a lockfile must already exist and fully describe the install. */
+  readonly requireLockfile: boolean
   readonly token?: string
 }
 
@@ -131,6 +133,7 @@ export const getInputs = (): Inputs => ({
   ...resolveProjectPaths(),
   runtime: parseRuntime(),
   install: getBooleanInput('install'),
+  requireLockfile: getBooleanInput('require-lockfile'),
   token: getInput('token') || undefined,
 })
 

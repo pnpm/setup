@@ -73,6 +73,23 @@ inputs:
       becomes the working directory.
     required: false
     deprecationMessage: 'The package-json-file input is deprecated; use working-directory instead.'
+  require-lockfile:
+    description: |
+      Whether the install has to be fully described by `pnpm-lock.yaml`.
+
+      When `true`, the action fails if no lockfile is found — in
+      `working-directory` or, as pnpm itself searches, above it — without
+      running pnpm at all, and otherwise runs the install with
+      `--frozen-lockfile`.
+
+      This is narrower than it sounds. pnpm already refuses to update an
+      *existing* lockfile when it detects CI, and GitHub Actions always sets
+      `CI`, so an out-of-date lockfile fails a plain install anyway. What that
+      default does not do is require a lockfile to exist: with none at all,
+      `pnpm install` resolves from the registry, writes one and exits 0. Set
+      this when that should fail the job instead.
+    required: false
+    default: 'false'
   install:
     description: |
       Whether to run `pnpm install` after pnpm and the runtime are set up.

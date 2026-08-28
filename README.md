@@ -25,6 +25,7 @@ Only one version of each runtime can be installed globally. If a runtime name is
 | `working-directory` | Directory the project lives in, relative to `GITHUB_WORKSPACE`. Config is read from the manifest there, `pnpm install` runs there, and `cache-dependency-path` resolves relative to it. Default: `.`. |
 | `package-json-file` | **Deprecated** — use `working-directory`. Still honoured on its own; the directory containing the file becomes the working directory. |
 | `install` | Run `pnpm install` after setup. Default: `true`. Set to `false` for jobs that only need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration). |
+| `require-lockfile` | Fail unless a `pnpm-lock.yaml` already describes the install; runs `pnpm install --frozen-lockfile`. Default: `false`. |
 | `token` | No longer used. pnpm is fetched from the npm registry and verified against npm's signature, so the action makes no GitHub API request. Kept so workflows that pass it keep working. |
 
 ## Outputs
@@ -172,6 +173,29 @@ A job that installs in a step of its own rather than through this action is
 saved at the end of the job instead, since that is the first moment the log is
 known to be complete. The record count cannot be bounded there, so only the
 "nothing disappeared" half of the check applies.
+
+### Require a lockfile
+
+```yaml
+- uses: pnpm/setup@v2
+  with:
+    require-lockfile: true
+```
+
+Fails unless `pnpm-lock.yaml` already describes the install, and runs
+`pnpm install --frozen-lockfile` when it does. If no lockfile is found — in
+`working-directory` or above it, the way pnpm searches — the action fails
+before running pnpm, saying so directly rather than through an install that
+was never going to succeed.
+
+This is narrower than it sounds, and worth understanding before reaching for
+it. pnpm refuses to update an *existing* lockfile when it detects CI, and
+GitHub Actions always sets `CI`, so an out-of-date lockfile already fails a
+plain install — on pnpm 11 and 12 alike. What that default does not do is
+require a lockfile to exist: with none at all, `pnpm install` resolves from
+the registry, writes one and exits `0`. Set `require-lockfile` when a missing
+lockfile should fail the job instead of silently installing unpinned
+dependencies.
 
 ### Skip `pnpm install`
 
