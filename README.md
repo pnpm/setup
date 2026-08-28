@@ -44,7 +44,7 @@ Only one version of each runtime can be installed globally. If a runtime name is
 ```json
 // package.json
 {
-  "packageManager": "pnpm@12.0.0-beta.4",
+  "packageManager": "pnpm@12.0.0",
   "devEngines": {
     "runtime": { "name": "node", "version": "^22.0.0", "onFail": "download" }
   }

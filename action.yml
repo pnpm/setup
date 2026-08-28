@@ -6,7 +6,7 @@ branding:
 inputs:
   version:
     description: |
-      Version of pnpm to install: an exact version (`12.0.0-beta.4`), a
+      Version of pnpm to install: an exact version (`12.0.0`), a
       semver range (`^12.0.0`), or an npm dist-tag (`next-12`). Must resolve
       to pnpm v11 or newer — the action downloads pnpm's native per-platform
       executable directly, without needing Node.js or npm.

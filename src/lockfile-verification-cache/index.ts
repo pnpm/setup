@@ -178,16 +178,48 @@ function readRecords(cacheFilePath: string): string[] | undefined {
 }
 
 /**
- * pnpm reports this itself, as of v11 — the oldest release this action
- * installs — so the per-platform default does not need mirroring here.
- * `pnpm config get` would not do: it reports settings, not defaults, and
- * prints `undefined` for an unset `cacheDir`.
+ * `pnpm cache path` reports this directly, but not every release the action
+ * installs has the subcommand — 12.0.0-rc.4 does not, while 11.22.0 does — so
+ * older ones still need pnpm's default derived here. `pnpm config get` cannot
+ * stand in for it: that reports settings, not defaults, and prints `undefined`
+ * for an unset `cacheDir`.
  */
 async function getPnpmCacheDirectory(): Promise<string> {
-  const { stdout } = await getExecOutput('pnpm cache path', undefined, { silent: true })
-  const cacheDirectory = stdout.trim()
-  if (!cacheDirectory) {
-    throw new Error('`pnpm cache path` printed nothing')
+  const reported = await runPnpmCachePath()
+  if (reported) return removeWindowsExtendedPathPrefix(reported)
+
+  const { stdout } = await getExecOutput('pnpm config get cacheDir', undefined, {
+    silent: true,
+    ignoreReturnCode: true,
+  })
+  const configured = stdout.trim()
+  if (configured && configured !== 'undefined') {
+    return removeWindowsExtendedPathPrefix(configured)
   }
-  return removeWindowsExtendedPathPrefix(cacheDirectory)
+  return defaultPnpmCacheDirectory()
+}
+
+async function runPnpmCachePath(): Promise<string | undefined> {
+  const { exitCode, stdout } = await getExecOutput('pnpm cache path', undefined, {
+    silent: true,
+    ignoreReturnCode: true,
+  })
+  if (exitCode !== 0) return undefined
+  return stdout.trim() || undefined
+}
+
+/** Mirrors pnpm's own `cacheDir` default, for releases that cannot report it. */
+function defaultPnpmCacheDirectory(): string {
+  const { XDG_CACHE_HOME, LOCALAPPDATA } = process.env
+  if (XDG_CACHE_HOME) return path.join(XDG_CACHE_HOME, 'pnpm')
+
+  const homeDir = os.homedir()
+  switch (process.platform) {
+  case 'darwin':
+    return path.join(homeDir, 'Library', 'Caches', 'pnpm')
+  case 'win32':
+    return LOCALAPPDATA ? path.join(LOCALAPPDATA, 'pnpm-cache') : path.join(homeDir, '.pnpm-cache')
+  default:
+    return path.join(homeDir, '.cache', 'pnpm')
+  }
 }
