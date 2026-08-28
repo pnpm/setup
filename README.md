@@ -107,6 +107,12 @@ runtime selectors and the versions actually installed. Reordering
 `devEngines.runtime` does not change the key — the same set of runtimes
 produces the same store.
 
+The store is saved in the job's post step, and only when the job succeeded. A
+cancelled or failed job would otherwise publish a half-populated store under a
+key that later runs match exactly, and cache keys are immutable — so that entry
+would keep being restored instead of repaired. The trade-off is that a job
+failing after `pnpm install` (a failing test, say) leaves the cache untouched.
+
 ### Skip `pnpm install`
 
 For jobs that only need pnpm itself — e.g. `pnpm audit`, lockfile-only regeneration — set `install: false`:
@@ -124,6 +130,7 @@ For jobs that only need pnpm itself — e.g. `pnpm audit`, lockfile-only regener
 2. `PNPM_HOME` is exported and `dest` plus `$PNPM_HOME/bin` are added to `PATH`.
 3. The action runs `pnpm runtime set <name> <version> -g` for every requested runtime, which downloads them into `$PNPM_HOME/bin` and makes them available to later workflow steps. It then disables context-aware shims for every installed runtime; see [Context-aware global shims](#context-aware-global-shims).
 4. If a `package.json` exists in the workspace, the action runs `pnpm install` (unless `install: false` is set). When runtimes were installed, `--no-runtime` is appended because the action has already processed `devEngines.runtime`.
+5. In the job's post step, and only if the job succeeded, the action prunes the pnpm store and — with `cache: true` — saves it; see [Cache the pnpm store](#cache-the-pnpm-store).
 
 ### Context-aware global shims
 
