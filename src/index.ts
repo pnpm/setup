@@ -42,8 +42,12 @@ async function runMain() {
   }
 
   if (restoredCache) {
+    // Falling back to the requested selector keeps the final key distinct
+    // from the provisional key the restore probed with. That key must never
+    // be written to: later runs match it exactly and would stop falling back
+    // to the prefix search that finds the versioned caches.
     const resolvedRuntimeVersion = request
-      ? await getInstalledRuntimeVersion(request.name, result.binDest)
+      ? await getInstalledRuntimeVersion(request.name, result.binDest) ?? request.version
       : undefined
     finalizeCache(restoredCache, resolvedRuntimeVersion)
   }

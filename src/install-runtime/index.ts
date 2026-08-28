@@ -1,4 +1,4 @@
-import { exportVariable, setFailed, startGroup, endGroup, info } from '@actions/core'
+import { exportVariable, setFailed, startGroup, endGroup, info, warning } from '@actions/core'
 import { spawn } from 'child_process'
 import { readFileSync } from 'fs'
 import path from 'path'
@@ -59,16 +59,30 @@ export async function installRuntime(
   return { name: request.name, version: request.version }
 }
 
-export async function getInstalledRuntimeVersion(name: RuntimeName, binDest: string): Promise<string> {
-  const stdout = await runPnpmForOutput(binDest, ['list', '--global', '--json', '--depth', '0'])
-  const listing = JSON.parse(stdout) as Array<{
-    readonly dependencies?: Record<string, { readonly version?: string }>
-  }>
-  const version = listing[0]?.dependencies?.[name]?.version
-  if (!version) {
-    throw new Error(`Unable to determine the installed ${name} version`)
+/**
+ * Read the version `pnpm runtime set` actually installed, so a moving
+ * selector such as `node@lts` is cached under the version it resolved to.
+ *
+ * This only refines a cache key, so it must never fail the run: a change in
+ * `pnpm list --json` output would otherwise break setup for every workflow
+ * that enables the cache. Report the problem and let the caller fall back.
+ */
+export async function getInstalledRuntimeVersion(
+  name: RuntimeName,
+  binDest: string,
+): Promise<string | undefined> {
+  try {
+    const stdout = await runPnpmForOutput(binDest, ['list', '--global', '--json', '--depth', '0'])
+    const listing = JSON.parse(stdout) as Array<{
+      readonly dependencies?: Record<string, { readonly version?: string }>
+    }>
+    const version = listing[0]?.dependencies?.[name]?.version
+    if (version) return version
+    warning(`Unable to determine the installed ${name} version from "pnpm list --global"`)
+  } catch (err: unknown) {
+    warning(`Unable to determine the installed ${name} version: ${err instanceof Error ? err.message : String(err)}`)
   }
-  return version
+  return undefined
 }
 
 /**

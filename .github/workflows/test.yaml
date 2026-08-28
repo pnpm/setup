@@ -146,13 +146,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # `pnpm runtime set` always fetches SHASUMS256.txt(.sig) and index.json
+      # from nodejs.org to verify the runtime, warm store or not, so the job
+      # cannot prove the restore happened by cutting the network. What it can
+      # prove is the key scheme: a second run of the same selector must land
+      # an exact hit on the key the first run saved under the resolved
+      # version, which only holds if the restore precedes the install.
       - id: pnpm
         uses: ./
-        env:
-          # Block pnpm runtime downloads without blocking action or cache downloads.
-          pnpm_config_https_proxy: http://127.0.0.1:9
-          pnpm_config_no_proxy: registry.npmjs.org
-          pnpm_config_fetch_retries: 0
         with:
           version: '11.22.0'
           runtime: node@24.19.0
