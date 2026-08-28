@@ -39,7 +39,11 @@ inputs:
       project pins. Set the variable in the workflow to override.
     required: false
   cache:
-    description: Whether to cache the pnpm store directory and restore it before installing the runtimes
+    description: |
+      Whether to cache the pnpm store directory, keyed on the lockfile's
+      content hash, and restore it before installing the runtimes. The
+      results of pnpm's lockfile verification are cached either way — see
+      the README.
     required: false
     default: 'false'
   cache-dependency-path:

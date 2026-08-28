@@ -11,6 +11,7 @@ import {
   keepInstalledRuntimesAuthoritative,
   logSkippedRuntime,
 } from './install-runtime'
+import { saveVerificationCache, snapshotVerificationLog } from './lockfile-verification-cache'
 import setOutputs from './outputs'
 import pnpmInstall from './pnpm-install'
 import pruneStore from './pnpm-store-prune'
@@ -68,13 +69,26 @@ async function runMain() {
 
   setOutputs(inputs, result.binDest, installed)
 
+  // Taken after the runtime installs, which append a verdict each, so the
+  // bound below covers only the install this action is about to run.
+  snapshotVerificationLog()
+
   if (inputs.install) {
     pnpmInstall(inputs, runtimes.length > 0)
+    // Uploaded here rather than in the post step so that whatever the job runs
+    // next cannot alter what later jobs restore. When `install` is false the
+    // log is not complete yet — the job installs in a step of its own, and the
+    // post step is the first moment it is known to be done.
+    await saveVerificationCache(1)
   }
 }
 
 async function runPost() {
   const inputs = JSON.parse(getState('inputs')) as Inputs
+  // Covers a job that installs in a later step of its own; when this action
+  // installed, the log was already saved then. Runs before the prune because
+  // pnpm versions before pnpm/pnpm#13893 delete the log during one.
+  await saveVerificationCache()
   pruneStore(inputs)
   await saveCache(inputs)
 }
