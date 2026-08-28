@@ -1,0 +1,47 @@
+name: Update Dependencies
+
+on:
+  schedule:
+    - cron: '0 4 * * 1' # Mondays, 04:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-dependencies
+  cancel-in-progress: false
+
+jobs:
+  update-dependencies:
+    # The branch push and the pull request both target this repository, so
+    # this must never run on a fork.
+    if: github.repository == 'pnpm/setup'
+    name: 'Update dependencies'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # This repository's own action, on the pnpm it ships. `install: false`
+      # because pnpm/update deletes the lockfile and node_modules before it
+      # resolves anything, so installing first would be thrown away.
+      - uses: ./
+        with:
+          version: '^12.0.0'
+          install: false
+
+      - uses: pnpm/update@v0
+        with:
+          # `dist/index.js` is committed, and pr-check rebuilds it and fails on
+          # any difference. Every runtime dependency is inlined into that
+          # bundle, and esbuild itself decides how — so it has to be
+          # regenerated in the same commit as the bump, or the update pull
+          # request can never go green. This is the step Dependabot had no way
+          # to run.
+          post-update: pnpm run build
+          verify: |
+            pnpm exec tsc --noEmit
+            pnpm test
+          # No .changeset directory in this repository.
+          changesets: false
