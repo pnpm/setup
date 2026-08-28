@@ -100,6 +100,11 @@ jobs:
     # pnpm can report a Windows store path with the extended-length `\\?\`
     # prefix. Cache paths must use the regular drive-path form because the
     # cache toolkit otherwise interprets `?` as a glob in the root segment.
+    #
+    # The pnpm version below is load-bearing, not stale: 12.0.0 reports a
+    # plain `D:\.pnpm-store\v11` for this store-dir, so only an older
+    # release still reproduces the prefix this job exists to cover. Do not
+    # bump it without checking that `pnpm store path` still starts `\\?\`.
     name: 'Cache Windows extended-length store path'
     runs-on: windows-latest
     steps:
@@ -112,7 +117,7 @@ jobs:
 
       - uses: ./
         with:
-          version: '12.0.0'
+          version: '12.0.0-rc.0'
           runtime: node@22
           cache: true
 
