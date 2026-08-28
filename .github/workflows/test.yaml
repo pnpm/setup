@@ -826,36 +826,46 @@ jobs:
         shell: bash
 
   working-directory-deprecated-input:
-    # `package-json-file` is deprecated but must keep working on its own: the
-    # directory holding the file becomes the working directory.
+    # `package-json-file` is deprecated but must keep working exactly as it
+    # did: the directory holding the file becomes the working directory, and
+    # an explicit `cache-dependency-path` stays relative to the repository
+    # root. Rebasing it onto the working directory would look for
+    # `web/web/pnpm-lock.yaml` and fail the restore.
     name: 'Deprecated package-json-file still works'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up a project in web/
+      - name: Move this project into web/
         run: |
           set -e
-          rm -f package.json pnpm-lock.yaml pnpm-workspace.yaml
           mkdir -p web
-          cat > web/package.json <<'EOF'
-          {
-            "packageManager": "pnpm@12.0.0",
-            "dependencies": { "is-odd": "3.0.1" }
-          }
-          EOF
+          mv package.json pnpm-lock.yaml pnpm-workspace.yaml web/
+          node -e "
+            const fs = require('fs')
+            const manifest = JSON.parse(fs.readFileSync('web/package.json', 'utf8'))
+            manifest.packageManager = 'pnpm@12.0.0'
+            fs.writeFileSync('web/package.json', JSON.stringify(manifest, null, 2))
+          "
         shell: bash
 
       - uses: ./
         with:
           package-json-file: web/package.json
+          cache: true
+          cache-dependency-path: web/pnpm-lock.yaml
 
       - name: 'Test: the install ran in web/'
         run: |
           set -e
-          if [ ! -d web/node_modules/is-odd ]; then
-            echo "Expected pnpm install to populate web/node_modules/is-odd"
+          if [ ! -d web/node_modules/@actions/cache ]; then
+            echo "Expected pnpm install to populate web/node_modules"
             ls -la web || true
+            exit 1
+          fi
+          pnpm_version="$(pnpm --version)"
+          if [ "${pnpm_version}" != "12.0.0" ]; then
+            echo "Expected pnpm 12.0.0 from web/package.json, got ${pnpm_version}"
             exit 1
           fi
         shell: bash

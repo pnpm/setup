@@ -57,7 +57,7 @@ function readTargetVersion(opts: {
 
   if (GITHUB_WORKSPACE) {
     try {
-      const content = readFileSync(path.join(GITHUB_WORKSPACE, packageJsonFile), 'utf8');
+      const content = readFileSync(path.resolve(GITHUB_WORKSPACE, packageJsonFile), 'utf8');
       const manifest = packageJsonFile.endsWith('.yaml')
         ? parseYaml(content, { merge: true })
         : JSON.parse(content)

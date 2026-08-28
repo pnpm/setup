@@ -61,7 +61,11 @@ const MANIFEST_NAMES = ['package.json', 'package.yaml'] as const
  * `pnpm install` — running it at the repository root installs nothing at all
  * when the project lives one level down.
  */
-function resolveProjectPaths(): { workingDirectory: string, packageJsonFile: string } {
+function resolveProjectPaths(): {
+  workingDirectory: string
+  packageJsonFile: string
+  cacheDependencyPath: string
+} {
   const workingDirectoryInput = getInput('working-directory').trim()
   const packageJsonFileInput = getInput('package-json-file').trim()
 
@@ -75,11 +79,29 @@ function resolveProjectPaths(): { workingDirectory: string, packageJsonFile: str
 
   if (packageJsonFileInput) {
     const packageJsonFile = expandTilde(packageJsonFileInput)
-    return { workingDirectory: path.dirname(packageJsonFile), packageJsonFile }
+    const workingDirectory = path.dirname(packageJsonFile)
+    return { workingDirectory, packageJsonFile, cacheDependencyPath: resolveCacheDependencyPath(workingDirectory) }
   }
 
   const workingDirectory = expandTilde(workingDirectoryInput || '.')
-  return { workingDirectory, packageJsonFile: findManifest(workingDirectory) }
+  return {
+    workingDirectory,
+    packageJsonFile: findManifest(workingDirectory),
+    cacheDependencyPath: resolveCacheDependencyPath(workingDirectory),
+  }
+}
+
+/**
+ * `cache-dependency-path` stays relative to the repository root, the way it
+ * has always been documented — rewriting a value the workflow set would turn
+ * an existing `web/pnpm-lock.yaml` into `web/web/pnpm-lock.yaml`. Only the
+ * default follows the project, so a subdirectory finds its own lockfile
+ * without the workflow having to name it twice.
+ */
+function resolveCacheDependencyPath(workingDirectory: string): string {
+  const configured = getInput('cache-dependency-path').trim()
+  if (configured) return expandTilde(configured)
+  return path.join(workingDirectory, 'pnpm-lock.yaml')
 }
 
 /**
@@ -92,7 +114,7 @@ function findManifest(workingDirectory: string): string {
   if (GITHUB_WORKSPACE) {
     for (const name of MANIFEST_NAMES) {
       const candidate = path.join(workingDirectory, name)
-      if (existsSync(path.join(GITHUB_WORKSPACE, candidate))) return candidate
+      if (existsSync(path.resolve(GITHUB_WORKSPACE, candidate))) return candidate
     }
   }
   return path.join(workingDirectory, MANIFEST_NAMES[0])
@@ -106,7 +128,6 @@ export const getInputs = (): Inputs => ({
   version: getInput('version'),
   dest: parseInputPath('dest'),
   cache: getBooleanInput('cache'),
-  cacheDependencyPath: parseInputPath('cache-dependency-path'),
   ...resolveProjectPaths(),
   runtime: parseRuntime(),
   install: getBooleanInput('install'),

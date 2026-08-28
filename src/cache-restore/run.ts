@@ -8,7 +8,6 @@ import { RuntimeRequest } from '../install-runtime'
 import { restoreVerificationCache } from '../lockfile-verification-cache'
 import { removeWindowsExtendedPathPrefix } from '../windows-path'
 import { getCacheKeyPrefix, getPrimaryCacheKey } from './keys'
-import { resolveCacheDependencyPath } from './paths'
 
 export interface RestoredCache {
   readonly fileHash: string
@@ -20,7 +19,7 @@ export async function runRestoreCache(
   inputs: Inputs,
   runtimes: readonly RuntimeRequest[],
 ): Promise<RestoredCache | undefined> {
-  const fileHash = await hashFiles(resolveCacheDependencyPath(inputs.cacheDependencyPath, inputs.workingDirectory))
+  const fileHash = await hashFiles(inputs.cacheDependencyPath)
   if (!fileHash) {
     // Both caches are keyed on the lockfile, so neither can be restored
     // without one. Only the store cache was asked for by name.

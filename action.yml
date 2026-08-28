@@ -47,9 +47,11 @@ inputs:
     required: false
     default: 'false'
   cache-dependency-path:
-    description: File path to the pnpm lockfile, which contents hash will be used as a cache key
+    description: |
+      File path to the pnpm lockfile, whose contents hash is used as a cache
+      key. Relative to the repository root (GITHUB_WORKSPACE). Defaults to
+      `pnpm-lock.yaml` inside `working-directory`.
     required: false
-    default: 'pnpm-lock.yaml'
   working-directory:
     description: |
       Directory the project lives in, relative to the repository root

@@ -21,7 +21,7 @@ Only one version of each runtime can be installed globally. If a runtime name is
 | `dest` | Where to store pnpm files. Defaults to `~/setup-pnpm`. |
 | `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime` in `package.json`, then to `lts` (for `node`) / `latest`. If the input itself is omitted, the action installs every entry in `devEngines.runtime` from `package.json`. |
 | `cache` | Cache the pnpm store directory and restore it before installing the runtimes. Default: `false`. |
-| `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Default: `pnpm-lock.yaml`. |
+| `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Relative to `GITHUB_WORKSPACE`. Defaults to `pnpm-lock.yaml` inside `working-directory`. |
 | `working-directory` | Directory the project lives in, relative to `GITHUB_WORKSPACE`. Config is read from the manifest there, `pnpm install` runs there, and `cache-dependency-path` resolves relative to it. Default: `.`. |
 | `package-json-file` | **Deprecated** — use `working-directory`. Still honoured on its own; the directory containing the file becomes the working directory. |
 | `install` | Run `pnpm install` after setup. Default: `true`. Set to `false` for jobs that only need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration). |
@@ -107,8 +107,10 @@ When the project is not at the repository root — a site in `docs/`, an app in
 ```
 
 `pnpm install` then runs in `docs`, `packageManager` and `devEngines` are read
-from `docs/package.json`, and `cache-dependency-path` resolves to
-`docs/pnpm-lock.yaml`. Without this the install runs at the repository root,
+from `docs/package.json`, and the cache key comes from `docs/pnpm-lock.yaml`.
+Set `cache-dependency-path` yourself and it stays relative to the repository
+root, as it has always been — only its default follows the working directory.
+Without this the install runs at the repository root,
 where pnpm finds no manifest, prints `Already up to date` and exits `0` having
 installed nothing — a green setup step followed by a confusing failure later.
 

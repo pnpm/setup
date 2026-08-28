@@ -13,7 +13,7 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
     info('GITHUB_WORKSPACE is not set; skipping `pnpm install`.')
     return
   }
-  const manifestPath = path.join(GITHUB_WORKSPACE, inputs.packageJsonFile)
+  const manifestPath = path.resolve(GITHUB_WORKSPACE, inputs.packageJsonFile)
   if (!existsSync(manifestPath)) {
     info(`No ${inputs.packageJsonFile} found in workspace; skipping \`pnpm install\`.`)
     return

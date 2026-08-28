@@ -134,7 +134,7 @@ function readManifest(inputs: Inputs): Record<string, unknown> | undefined {
   const { GITHUB_WORKSPACE } = process.env
   if (!GITHUB_WORKSPACE) return undefined
   try {
-    const content = readFileSync(path.join(GITHUB_WORKSPACE, inputs.packageJsonFile), 'utf8')
+    const content = readFileSync(path.resolve(GITHUB_WORKSPACE, inputs.packageJsonFile), 'utf8')
     return inputs.packageJsonFile.endsWith('.yaml')
       ? parseYaml(content, { merge: true })
       : JSON.parse(content)
