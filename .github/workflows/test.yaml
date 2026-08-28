@@ -773,3 +773,90 @@ jobs:
             exit 1
           fi
         shell: bash
+
+  working-directory:
+    # A project whose root is not the repository root. Running the install at
+    # the repository root would exit 0 having installed nothing, so assert the
+    # dependency actually landed. `cache: true` is part of the test: without
+    # `cache-dependency-path` rebasing onto the working directory it matches no
+    # lockfile and the restore throws outright.
+    name: 'Project in a subdirectory'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Move this project into docs/
+        run: |
+          set -e
+          mkdir -p docs
+          mv package.json pnpm-lock.yaml pnpm-workspace.yaml docs/
+          node -e "
+            const fs = require('fs')
+            const manifest = JSON.parse(fs.readFileSync('docs/package.json', 'utf8'))
+            manifest.packageManager = 'pnpm@12.0.0'
+            fs.writeFileSync('docs/package.json', JSON.stringify(manifest, null, 2))
+          "
+        shell: bash
+
+      - id: pnpm
+        uses: ./
+        with:
+          working-directory: docs
+          runtime: node@22
+          cache: true
+
+      - name: 'Test: the subdirectory project was installed'
+        run: |
+          set -e
+          if [ ! -d docs/node_modules/@actions/cache ]; then
+            echo "Expected pnpm install to populate docs/node_modules"
+            ls -la docs || true
+            exit 1
+          fi
+          if [ -d node_modules ]; then
+            echo "Did not expect node_modules at the repository root"
+            exit 1
+          fi
+          # `packageManager` was read from docs/package.json, not the root.
+          pnpm_version="$(pnpm --version)"
+          if [ "${pnpm_version}" != "12.0.0" ]; then
+            echo "Expected pnpm 12.0.0 from docs/package.json, got ${pnpm_version}"
+            exit 1
+          fi
+        shell: bash
+
+  working-directory-deprecated-input:
+    # `package-json-file` is deprecated but must keep working on its own: the
+    # directory holding the file becomes the working directory.
+    name: 'Deprecated package-json-file still works'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up a project in web/
+        run: |
+          set -e
+          rm -f package.json pnpm-lock.yaml pnpm-workspace.yaml
+          mkdir -p web
+          cat > web/package.json <<'EOF'
+          {
+            "packageManager": "pnpm@12.0.0",
+            "dependencies": { "is-odd": "3.0.1" }
+          }
+          EOF
+        shell: bash
+
+      - uses: ./
+        with:
+          package-json-file: web/package.json
+
+      - name: 'Test: the install ran in web/'
+        run: |
+          set -e
+          if [ ! -d web/node_modules/is-odd ]; then
+            echo "Expected pnpm install to populate web/node_modules/is-odd"
+            ls -la web || true
+            exit 1
+          fi
+        shell: bash
+

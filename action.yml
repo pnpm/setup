@@ -50,10 +50,27 @@ inputs:
     description: File path to the pnpm lockfile, which contents hash will be used as a cache key
     required: false
     default: 'pnpm-lock.yaml'
-  package-json-file:
-    description: File path to the package.json to read `packageManager` and `devEngines.runtime` configuration. This path must be relative to the repository root (GITHUB_WORKSPACE).
+  working-directory:
+    description: |
+      Directory the project lives in, relative to the repository root
+      (GITHUB_WORKSPACE). The action reads `packageManager` and
+      `devEngines` from the manifest there, runs `pnpm install` there, and
+      resolves `cache-dependency-path` relative to it. Defaults to the
+      repository root.
+
+      pnpm finds the workspace root itself by walking up, so a project
+      inside a pnpm workspace does not need this — point it at a project
+      whose root is not the repository root.
     required: false
-    default: 'package.json'
+    default: '.'
+  package-json-file:
+    description: |
+      Deprecated. Use `working-directory` instead: the manifest is read
+      from that directory, which is also where `pnpm install` runs. Still
+      honoured when set on its own — the directory containing the file
+      becomes the working directory.
+    required: false
+    deprecationMessage: 'The package-json-file input is deprecated; use working-directory instead.'
   install:
     description: |
       Whether to run `pnpm install` after pnpm and the runtime are set up.

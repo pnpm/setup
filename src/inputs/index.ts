@@ -1,5 +1,7 @@
 import { getBooleanInput, getInput, InputOptions } from '@actions/core'
 import expandTilde from 'expand-tilde'
+import { existsSync } from 'fs'
+import path from 'path'
 
 export type RuntimeName = 'node' | 'bun' | 'deno'
 
@@ -15,6 +17,9 @@ export interface Inputs {
   readonly dest: string
   readonly cache: boolean
   readonly cacheDependencyPath: string
+  /** Where the project lives, relative to GITHUB_WORKSPACE. */
+  readonly workingDirectory: string
+  /** The manifest to read config from, relative to GITHUB_WORKSPACE. */
   readonly packageJsonFile: string
   readonly runtime?: RuntimeInput
   readonly install: boolean
@@ -47,6 +52,52 @@ function parseRuntime(): RuntimeInput | undefined {
   return { name, version }
 }
 
+const MANIFEST_NAMES = ['package.json', 'package.yaml'] as const
+
+/**
+ * `working-directory` says where the project is; `package-json-file` said
+ * which file to read. The second is deprecated onto the first, because the
+ * directory holding the manifest is also the only sensible place to run
+ * `pnpm install` — running it at the repository root installs nothing at all
+ * when the project lives one level down.
+ */
+function resolveProjectPaths(): { workingDirectory: string, packageJsonFile: string } {
+  const workingDirectoryInput = getInput('working-directory').trim()
+  const packageJsonFileInput = getInput('package-json-file').trim()
+
+  if (workingDirectoryInput && workingDirectoryInput !== '.' && packageJsonFileInput) {
+    throw new Error(
+      'Both `working-directory` and the deprecated `package-json-file` are set. ' +
+      'Remove `package-json-file`: `working-directory` already covers where the manifest ' +
+      'is read from and where `pnpm install` runs.',
+    )
+  }
+
+  if (packageJsonFileInput) {
+    const packageJsonFile = expandTilde(packageJsonFileInput)
+    return { workingDirectory: path.dirname(packageJsonFile), packageJsonFile }
+  }
+
+  const workingDirectory = expandTilde(workingDirectoryInput || '.')
+  return { workingDirectory, packageJsonFile: findManifest(workingDirectory) }
+}
+
+/**
+ * pnpm reads `package.yaml` as well as `package.json`, and without an input
+ * naming the file the action has to look. Falls back to `package.json` so the
+ * "no manifest" path still reports the name a user expects.
+ */
+function findManifest(workingDirectory: string): string {
+  const { GITHUB_WORKSPACE } = process.env
+  if (GITHUB_WORKSPACE) {
+    for (const name of MANIFEST_NAMES) {
+      const candidate = path.join(workingDirectory, name)
+      if (existsSync(path.join(GITHUB_WORKSPACE, candidate))) return candidate
+    }
+  }
+  return path.join(workingDirectory, MANIFEST_NAMES[0])
+}
+
 function isSupportedRuntime(name: string): name is RuntimeName {
   return (SUPPORTED_RUNTIMES as readonly string[]).includes(name)
 }
@@ -56,7 +107,7 @@ export const getInputs = (): Inputs => ({
   dest: parseInputPath('dest'),
   cache: getBooleanInput('cache'),
   cacheDependencyPath: parseInputPath('cache-dependency-path'),
-  packageJsonFile: parseInputPath('package-json-file'),
+  ...resolveProjectPaths(),
   runtime: parseRuntime(),
   install: getBooleanInput('install'),
   token: getInput('token') || undefined,

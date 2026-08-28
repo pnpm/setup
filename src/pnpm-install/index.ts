@@ -32,7 +32,7 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
   startGroup(`Running pnpm ${args.join(' ')}...`)
   const { error, status } = spawnSync('pnpm', args, {
     stdio: 'inherit',
-    cwd: path.dirname(manifestPath),
+    cwd: path.resolve(GITHUB_WORKSPACE, inputs.workingDirectory),
     shell: true,
   })
   endGroup()

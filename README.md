@@ -22,7 +22,8 @@ Only one version of each runtime can be installed globally. If a runtime name is
 | `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime` in `package.json`, then to `lts` (for `node`) / `latest`. If the input itself is omitted, the action installs every entry in `devEngines.runtime` from `package.json`. |
 | `cache` | Cache the pnpm store directory and restore it before installing the runtimes. Default: `false`. |
 | `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Default: `pnpm-lock.yaml`. |
-| `package-json-file` | Path to `package.json` (relative to `GITHUB_WORKSPACE`). Default: `package.json`. |
+| `working-directory` | Directory the project lives in, relative to `GITHUB_WORKSPACE`. Config is read from the manifest there, `pnpm install` runs there, and `cache-dependency-path` resolves relative to it. Default: `.`. |
+| `package-json-file` | **Deprecated** — use `working-directory`. Still honoured on its own; the directory containing the file becomes the working directory. |
 | `install` | Run `pnpm install` after setup. Default: `true`. Set to `false` for jobs that only need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration). |
 | `token` | No longer used. pnpm is fetched from the npm registry and verified against npm's signature, so the action makes no GitHub API request. Kept so workflows that pass it keep working. |
 
@@ -92,6 +93,29 @@ jobs:
   with:
     runtime: deno@2
 ```
+
+### A project in a subdirectory
+
+When the project is not at the repository root — a site in `docs/`, an app in
+`web/` — point the action at it:
+
+```yaml
+- uses: pnpm/setup@v2
+  with:
+    working-directory: docs
+    cache: true
+```
+
+`pnpm install` then runs in `docs`, `packageManager` and `devEngines` are read
+from `docs/package.json`, and `cache-dependency-path` resolves to
+`docs/pnpm-lock.yaml`. Without this the install runs at the repository root,
+where pnpm finds no manifest, prints `Already up to date` and exits `0` having
+installed nothing — a green setup step followed by a confusing failure later.
+
+A project *inside* a pnpm workspace does not need this. pnpm locates the
+workspace root by walking up from wherever it starts, so an install anywhere in
+the workspace installs the whole workspace. Reach for `working-directory` when
+the project's own root is not the repository root.
 
 ### Cache the pnpm store
 
