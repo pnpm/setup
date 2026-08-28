@@ -716,9 +716,9 @@ jobs:
         shell: bash
 
   cache-lockfile-verification:
-    # The action caches pnpm's lockfile verification log, which lives in
-    # `cacheDir` — a directory pnpm resolves per platform and does not print.
-    # Guard the action's copy of that default against pnpm's own.
+    # The action caches pnpm's lockfile verification log, which lives in the
+    # directory `pnpm cache path` reports. Guard that the log is named and
+    # placed the way the action expects, on every platform.
     name: 'Lockfile verification cache (${{ matrix.os }}, cache=${{ matrix.cache }})'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -754,12 +754,10 @@ jobs:
       - name: 'Test: pnpm wrote the verification log where the action looks for it'
         run: |
           set -e
-          case "$RUNNER_OS" in
-            Linux) cacheDir="${XDG_CACHE_HOME:-$HOME/.cache}/pnpm" ;;
-            macOS) cacheDir="$HOME/Library/Caches/pnpm" ;;
-            Windows) cacheDir="$(cygpath -u "$LOCALAPPDATA")/pnpm-cache" ;;
-            *) echo "Unexpected RUNNER_OS: $RUNNER_OS"; exit 1 ;;
-          esac
+          cacheDir="$(pnpm cache path)"
+          if [ "$RUNNER_OS" = Windows ]; then
+            cacheDir="$(cygpath -u "${cacheDir}")"
+          fi
           echo "Expecting the verification log in ${cacheDir}"
           if [ ! -f "${cacheDir}/lockfile-verified.jsonl" ]; then
             echo "No lockfile-verified.jsonl there; the action would cache nothing"

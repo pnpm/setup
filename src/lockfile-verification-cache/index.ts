@@ -177,32 +177,17 @@ function readRecords(cacheFilePath: string): string[] | undefined {
   }
 }
 
+/**
+ * pnpm reports this itself, as of v11 — the oldest release this action
+ * installs — so the per-platform default does not need mirroring here.
+ * `pnpm config get` would not do: it reports settings, not defaults, and
+ * prints `undefined` for an unset `cacheDir`.
+ */
 async function getPnpmCacheDirectory(): Promise<string> {
-  const { stdout } = await getExecOutput('pnpm config get cacheDir', undefined, {
-    silent: true,
-    ignoreReturnCode: true,
-  })
-  const configured = stdout.trim()
-  // `pnpm config get` reports settings, not defaults: an unset `cacheDir`
-  // prints `undefined` and the default has to be derived here.
-  if (configured && configured !== 'undefined') {
-    return removeWindowsExtendedPathPrefix(configured)
+  const { stdout } = await getExecOutput('pnpm cache path', undefined, { silent: true })
+  const cacheDirectory = stdout.trim()
+  if (!cacheDirectory) {
+    throw new Error('`pnpm cache path` printed nothing')
   }
-  return defaultPnpmCacheDirectory()
-}
-
-/** Mirrors pnpm's own `cacheDir` default. */
-function defaultPnpmCacheDirectory(): string {
-  const { XDG_CACHE_HOME, LOCALAPPDATA } = process.env
-  if (XDG_CACHE_HOME) return path.join(XDG_CACHE_HOME, 'pnpm')
-
-  const homeDir = os.homedir()
-  switch (process.platform) {
-  case 'darwin':
-    return path.join(homeDir, 'Library', 'Caches', 'pnpm')
-  case 'win32':
-    return LOCALAPPDATA ? path.join(LOCALAPPDATA, 'pnpm-cache') : path.join(homeDir, '.pnpm-cache')
-  default:
-    return path.join(homeDir, '.cache', 'pnpm')
-  }
+  return removeWindowsExtendedPathPrefix(cacheDirectory)
 }
