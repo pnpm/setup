@@ -37,7 +37,7 @@ Only one version of each runtime can be installed globally. If a runtime name is
 | `runtime-name` | Name of the first installed runtime, or empty string if none was installed. |
 | `runtime-version` | Resolved version of the first installed runtime, or empty string if none was installed. |
 | `runtimes` | JSON array of every installed runtime in declaration order, as `{ "name": string, "version": string }` objects. Returns `[]` when none were installed. |
-| `cache-hit` | Whether the pnpm store cache matched the exact primary key. |
+| `cache-hit` | Whether the restored cache matched the current lockfile exactly, rather than falling back to a store cached for a different lockfile. |
 
 ## Usage
 
@@ -196,6 +196,12 @@ require a lockfile to exist: with none at all, `pnpm install` resolves from
 the registry, writes one and exits `0`. Set `require-lockfile` when a missing
 lockfile should fail the job instead of silently installing unpinned
 dependencies.
+
+Every job that saves a cache does so under a key unique to that run, and
+restoring falls back to the most recent entry for the current lockfile. This
+means a job that gets cancelled or fails mid-install can never pin a partial
+store under a key later runs are stuck matching — the next successful run
+simply publishes a fresher entry.
 
 ### Skip `pnpm install`
 

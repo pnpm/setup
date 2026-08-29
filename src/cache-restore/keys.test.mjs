@@ -1,31 +1,41 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { getCacheKeyPrefix, getPrimaryCacheKey } from './keys.ts'
+import { getCacheKeyPrefix, getSaveCacheKey } from './keys.ts'
 
-test('moving runtime selectors use the resolved version in the primary key', () => {
+test('moving runtime selectors produce distinct key prefixes', () => {
+  const previous = getCacheKeyPrefix('Linux', 'x64', [{ name: 'node', version: 'lts' }])
+  const current = getCacheKeyPrefix('Linux', 'x64', [{ name: 'node', version: 'next' }])
+
+  assert.notEqual(previous, current)
+})
+
+test('save keys for the same run and lockfile differ by resolved runtime version', () => {
   const prefix = getCacheKeyPrefix('Linux', 'x64', [{ name: 'node', version: 'lts' }])
-  const previousKey = getPrimaryCacheKey(prefix, 'lockfile-hash', [{ name: 'node', version: '22.22.0' }])
-  const currentKey = getPrimaryCacheKey(prefix, 'lockfile-hash', [{ name: 'node', version: '24.13.0' }])
+  const lockfileKeyPrefix = `${prefix}lockfile-hash-`
 
-  assert.notEqual(previousKey, currentKey)
-  assert.ok(previousKey.startsWith(prefix))
-  assert.ok(currentKey.startsWith(prefix))
+  const previousVersionKey = getSaveCacheKey(lockfileKeyPrefix, [{ name: 'node', version: '22.22.0' }], '123')
+  const currentVersionKey = getSaveCacheKey(lockfileKeyPrefix, [{ name: 'node', version: '24.13.0' }], '123')
+
+  assert.notEqual(previousVersionKey, currentVersionKey)
+  assert.ok(previousVersionKey.startsWith(lockfileKeyPrefix))
+  assert.ok(currentVersionKey.startsWith(lockfileKeyPrefix))
 })
 
-test('the provisional restore key is never a key a runtime run saves under', () => {
+test('save keys for the same run and version differ by run id, so no save is ever restored within its own run', () => {
   const prefix = getCacheKeyPrefix('Linux', 'x64', [{ name: 'node', version: '24.19.0' }])
-  const provisional = getPrimaryCacheKey(prefix, 'lockfile-hash')
-  const final = getPrimaryCacheKey(prefix, 'lockfile-hash', [{ name: 'node', version: '24.19.0' }])
+  const lockfileKeyPrefix = `${prefix}lockfile-hash-`
 
-  // An exact hit on the provisional key would stop the restore falling back
-  // to the prefix search that finds the versioned caches.
-  assert.notEqual(provisional, final)
+  const firstRun = getSaveCacheKey(lockfileKeyPrefix, [{ name: 'node', version: '24.19.0' }], '111')
+  const secondRun = getSaveCacheKey(lockfileKeyPrefix, [{ name: 'node', version: '24.19.0' }], '222')
+
+  assert.notEqual(firstRun, secondRun)
 })
 
-test('without a runtime the provisional key is the final key', () => {
+test('without a resolved runtime the save key is just the lockfile prefix and run id', () => {
   const prefix = getCacheKeyPrefix('Linux', 'x64', [])
+  const lockfileKeyPrefix = `${prefix}lockfile-hash-`
 
-  assert.equal(getPrimaryCacheKey(prefix, 'lockfile-hash'), getPrimaryCacheKey(prefix, 'lockfile-hash', []))
+  assert.equal(getSaveCacheKey(lockfileKeyPrefix, [], '123'), `${lockfileKeyPrefix}123`)
 })
 
 test('every requested runtime contributes to the key prefix', () => {
@@ -38,7 +48,7 @@ test('every requested runtime contributes to the key prefix', () => {
   assert.notEqual(single, both)
 })
 
-test('declaration order does not change the key', () => {
+test('declaration order does not change the key prefix', () => {
   const nodeFirst = getCacheKeyPrefix('Linux', 'x64', [
     { name: 'node', version: '24' },
     { name: 'bun', version: '1.3.13' },
@@ -52,19 +62,29 @@ test('declaration order does not change the key', () => {
   assert.equal(nodeFirst, bunFirst)
 })
 
-test('a version change in any runtime changes the primary key', () => {
+test('a version change in any runtime changes the save key', () => {
   const prefix = getCacheKeyPrefix('Linux', 'x64', [
     { name: 'node', version: 'lts' },
     { name: 'bun', version: 'latest' },
   ])
-  const before = getPrimaryCacheKey(prefix, 'lockfile-hash', [
-    { name: 'node', version: '24.19.0' },
-    { name: 'bun', version: '1.3.13' },
-  ])
-  const after = getPrimaryCacheKey(prefix, 'lockfile-hash', [
-    { name: 'node', version: '24.19.0' },
-    { name: 'bun', version: '1.3.14' },
-  ])
+  const lockfileKeyPrefix = `${prefix}lockfile-hash-`
+
+  const before = getSaveCacheKey(
+    lockfileKeyPrefix,
+    [
+      { name: 'node', version: '24.19.0' },
+      { name: 'bun', version: '1.3.13' },
+    ],
+    '123',
+  )
+  const after = getSaveCacheKey(
+    lockfileKeyPrefix,
+    [
+      { name: 'node', version: '24.19.0' },
+      { name: 'bun', version: '1.3.14' },
+    ],
+    '123',
+  )
 
   assert.notEqual(before, after)
 })
