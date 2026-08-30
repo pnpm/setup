@@ -7,7 +7,7 @@ import { Inputs } from '../inputs'
 import { RuntimeRequest } from '../install-runtime'
 import { restoreVerificationCache } from '../lockfile-verification-cache'
 import { removeWindowsExtendedPathPrefix } from '../windows-path'
-import { getCacheKeyPrefix, getSaveCacheKey } from './keys'
+import { getCacheKeyPrefix, getRestoreKeys, getSaveCacheKey, isLockfileExactHit } from './keys'
 
 export interface RestoredCache {
   readonly lockfileKeyPrefix: string
@@ -48,13 +48,7 @@ async function runRestoreStoreCache(
 
   const keyPrefix = getCacheKeyPrefix(process.env.RUNNER_OS, os.arch(), runtimes)
   const lockfileKeyPrefix = `${keyPrefix}${fileHash}-`
-
-  // We don't need to download everything again if only one dependency changed.
-  // We can still re-use a previous store to cache the rest of the unchanged
-  // dependencies. Saves are keyed by run id (see getSaveCacheKey), so
-  // lockfileKeyPrefix itself never matches exactly: every restore falls
-  // through to the prefix search and picks up the most recent matching entry.
-  const restoreKeys = [lockfileKeyPrefix, keyPrefix]
+  const restoreKeys = getRestoreKeys(lockfileKeyPrefix, keyPrefix)
 
   const restoredKey = await restoreCache([cachePath], lockfileKeyPrefix, restoreKeys)
 
@@ -68,14 +62,18 @@ async function runRestoreStoreCache(
 }
 
 export function finalizeCache(cache: RestoredCache, resolvedRuntimes: readonly RuntimeRequest[]) {
+  // GITHUB_RUN_ID alone is not enough: a manual re-run keeps the same run id
+  // and only bumps GITHUB_RUN_ATTEMPT, so without it a re-run would target
+  // the same immutable key its failed predecessor already published.
   const runId = process.env.GITHUB_RUN_ID ?? ''
-  const primaryKey = getSaveCacheKey(cache.lockfileKeyPrefix, resolvedRuntimes, runId)
+  const runAttempt = process.env.GITHUB_RUN_ATTEMPT ?? ''
+  const primaryKey = getSaveCacheKey(cache.lockfileKeyPrefix, resolvedRuntimes, `${runId}-${runAttempt}`)
   debug(`Primary key is ${primaryKey}`)
   saveState('cache_primary_key', primaryKey)
 
   // No save is ever restored within its own run, so "hit" here means the
   // lockfile matched exactly (best case), not that a save was skipped.
-  setOutput('cache-hit', cache.restoredKey?.startsWith(cache.lockfileKeyPrefix) ?? false)
+  setOutput('cache-hit', isLockfileExactHit(cache.restoredKey, cache.lockfileKeyPrefix))
 }
 
 async function getCacheDirectory() {

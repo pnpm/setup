@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { getCacheKeyPrefix, getSaveCacheKey } from './keys.ts'
+import { getCacheKeyPrefix, getRestoreKeys, getSaveCacheKey, isLockfileExactHit } from './keys.ts'
 
 test('moving runtime selectors produce distinct key prefixes', () => {
   const previous = getCacheKeyPrefix('Linux', 'x64', [{ name: 'node', version: 'lts' }])
@@ -29,6 +29,19 @@ test('save keys for the same run and version differ by run id, so no save is eve
   const secondRun = getSaveCacheKey(lockfileKeyPrefix, [{ name: 'node', version: '24.19.0' }], '222')
 
   assert.notEqual(firstRun, secondRun)
+})
+
+test('save keys for a re-run of the same run id differ by run attempt', () => {
+  // finalizeCache composes the run identity as `${runId}-${runAttempt}`, since
+  // GITHUB_RUN_ID stays fixed across a manual re-run — only GITHUB_RUN_ATTEMPT
+  // increments. Modeled here as the composed string keys.ts actually receives.
+  const prefix = getCacheKeyPrefix('Linux', 'x64', [{ name: 'node', version: '24.19.0' }])
+  const lockfileKeyPrefix = `${prefix}lockfile-hash-`
+
+  const firstAttempt = getSaveCacheKey(lockfileKeyPrefix, [{ name: 'node', version: '24.19.0' }], '555-1')
+  const secondAttempt = getSaveCacheKey(lockfileKeyPrefix, [{ name: 'node', version: '24.19.0' }], '555-2')
+
+  assert.notEqual(firstAttempt, secondAttempt)
 })
 
 test('without a resolved runtime the save key is just the lockfile prefix and run id', () => {
@@ -87,4 +100,20 @@ test('a version change in any runtime changes the save key', () => {
   )
 
   assert.notEqual(before, after)
+})
+
+test('restore keys try the exact lockfile match before falling back to any store for the runtime', () => {
+  const keyPrefix = getCacheKeyPrefix('Linux', 'x64', [{ name: 'node', version: '24' }])
+  const lockfileKeyPrefix = `${keyPrefix}lockfile-hash-`
+
+  assert.deepEqual(getRestoreKeys(lockfileKeyPrefix, keyPrefix), [lockfileKeyPrefix, keyPrefix])
+})
+
+test('cache-hit is true only when the restored key matches the current lockfile exactly', () => {
+  const keyPrefix = getCacheKeyPrefix('Linux', 'x64', [{ name: 'node', version: '24' }])
+  const lockfileKeyPrefix = `${keyPrefix}lockfile-hash-`
+
+  assert.equal(isLockfileExactHit(`${lockfileKeyPrefix}some-run-id`, lockfileKeyPrefix), true)
+  assert.equal(isLockfileExactHit(keyPrefix, lockfileKeyPrefix), false)
+  assert.equal(isLockfileExactHit(undefined, lockfileKeyPrefix), false)
 })

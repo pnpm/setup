@@ -20,6 +20,22 @@ export function getSaveCacheKey(
 }
 
 /**
+ * `restoreCache`'s fallback list, most specific first: an exact lockfile
+ * match, then any store for this OS/arch/runtime combination regardless of
+ * lockfile. `lockfileKeyPrefix` also has to be passed as the primary key —
+ * see `getSaveCacheKey` — but it can never match there, since every save
+ * appends a run id; the match always happens here, in the fallback search.
+ */
+export function getRestoreKeys(lockfileKeyPrefix: string, keyPrefix: string): string[] {
+  return [lockfileKeyPrefix, keyPrefix]
+}
+
+/** True only when the restored store was cached for this exact lockfile, not a fallback match. */
+export function isLockfileExactHit(restoredKey: string | undefined, lockfileKeyPrefix: string): boolean {
+  return restoredKey?.startsWith(lockfileKeyPrefix) ?? false
+}
+
+/**
  * Sorted by name so that reordering `devEngines.runtime` — which produces the
  * same store — keeps hitting the same cache. Names are unique per request
  * list, so the sort is a total order.
