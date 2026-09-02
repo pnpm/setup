@@ -645,6 +645,73 @@ jobs:
           esac
         shell: bash
 
+  node-version-file:
+    name: 'Node version file (${{ matrix.format }} / ${{ matrix.os }})'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            format: node-version
+            file: .node-version
+            version: 22.22.0
+            runtime: ''
+          - os: ubuntu-latest
+            format: tool-versions
+            file: .tool-versions
+            version: 24.19.0
+            runtime: ''
+          - os: windows-latest
+            format: nvmrc
+            file: .nvmrc
+            version: 22.22.0
+            runtime: node
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Write version file in a subdirectory project
+        env:
+          FORMAT: ${{ matrix.format }}
+          VERSION_FILE: ${{ matrix.file }}
+          VERSION: ${{ matrix.version }}
+        run: |
+          set -e
+          mkdir project
+          if [ "${FORMAT}" = "tool-versions" ]; then
+            printf 'ruby 3.4.5\nnodejs %s\n' "${VERSION}" > "project/${VERSION_FILE}"
+          else
+            printf 'v%s # project runtime\n' "${VERSION}" > "project/${VERSION_FILE}"
+          fi
+        shell: bash
+
+      - id: pnpm
+        uses: ./
+        with:
+          version: '12.0.0'
+          working-directory: project
+          runtime: ${{ matrix.runtime }}
+          node-version-file: ${{ matrix.file }}
+          install: false
+
+      - name: 'Test: version file selected Node.js'
+        env:
+          EXPECTED: v${{ matrix.version }}
+          OUTPUT_NAME: ${{ steps.pnpm.outputs.runtime-name }}
+          OUTPUT_VERSION: ${{ steps.pnpm.outputs.runtime-version }}
+        run: |
+          set -e
+          actual="$(node --version)"
+          if [ "${actual}" != "${EXPECTED}" ]; then
+            echo "Expected ${EXPECTED}, got ${actual}"
+            exit 1
+          fi
+          if [ "${OUTPUT_NAME}" != "node" ] || [ "v${OUTPUT_VERSION}" != "${EXPECTED}" ]; then
+            echo "Unexpected runtime outputs: ${OUTPUT_NAME}@${OUTPUT_VERSION}"
+            exit 1
+          fi
+        shell: bash
+
   install-false:
     # `install: false` skips the auto-install step even though a manifest is
     # present.

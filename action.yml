@@ -38,6 +38,17 @@ inputs:
       disabled, so later steps run exactly this version instead of one a
       project pins. Set the variable in the workflow to override.
     required: false
+  node-version-file:
+    description: |
+      File containing the Node.js version to install. Relative to
+      `working-directory`. Supports plain version files such as `.node-version`
+      and `.nvmrc`, plus the `node` or `nodejs` entry in `.tool-versions`.
+
+      When `runtime` is omitted, this installs Node.js alongside any non-Node
+      runtimes declared in `devEngines.runtime`. `runtime: node` reads its
+      version from this file. A version included directly in `runtime` takes
+      precedence, and an explicit Bun or Deno runtime ignores this input.
+    required: false
   cache:
     description: |
       Whether to cache the pnpm store directory, keyed on the lockfile's
@@ -57,8 +68,8 @@ inputs:
       Directory the project lives in, relative to the repository root
       (GITHUB_WORKSPACE). The action reads `packageManager` and
       `devEngines` from the manifest there, runs `pnpm install` there, and
-      resolves `cache-dependency-path` relative to it. Defaults to the
-      repository root.
+      resolves `node-version-file` and the default `cache-dependency-path`
+      relative to it. Defaults to the repository root.
 
       pnpm finds the workspace root itself by walking up, so a project
       inside a pnpm workspace does not need this — point it at a project

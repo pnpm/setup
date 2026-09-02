@@ -20,9 +20,10 @@ Only one version of each runtime can be installed globally. If a runtime name is
 | `version` | Version of pnpm to install: an exact version, a semver range (`^12.0.0`), or a dist-tag (`next-12`). Must resolve to v11 or newer. Optional when `packageManager` or `devEngines.packageManager` is set in `package.json`. |
 | `dest` | Where to store pnpm files. Defaults to `~/setup-pnpm`. |
 | `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime` in `package.json`, then to `lts` (for `node`) / `latest`. If the input itself is omitted, the action installs every entry in `devEngines.runtime` from `package.json`. |
+| `node-version-file` | File containing the Node.js version to install, relative to `working-directory`. Supports plain files such as `.node-version` and `.nvmrc`, plus the `node` or `nodejs` entry in `.tool-versions`. An explicit version in `runtime` takes precedence. |
 | `cache` | Cache the pnpm store directory and restore it before installing the runtimes. Default: `false`. |
 | `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Relative to `GITHUB_WORKSPACE`. Defaults to `pnpm-lock.yaml` inside `working-directory`. |
-| `working-directory` | Directory the project lives in, relative to `GITHUB_WORKSPACE`. Config is read from the manifest there, `pnpm install` runs there, and `cache-dependency-path` resolves relative to it. Default: `.`. |
+| `working-directory` | Directory the project lives in, relative to `GITHUB_WORKSPACE`. Config is read from the manifest there, `pnpm install` runs there, and `node-version-file` plus the default `cache-dependency-path` resolve relative to it. Default: `.`. |
 | `package-json-file` | **Deprecated** — use `working-directory`. Still honoured on its own; the directory containing the file becomes the working directory. |
 | `install` | Run `pnpm install` after setup. Default: `true`. Set to `false` for jobs that only need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration). |
 | `require-lockfile` | Fail unless a `pnpm-lock.yaml` already describes the install; runs `pnpm install --frozen-lockfile`. Default: `false`. |
@@ -66,6 +67,25 @@ jobs:
 
 `pnpm install` runs automatically because the workspace has a `package.json`.
 
+### Install Node.js from a version file
+
+```yaml
+- uses: pnpm/setup@v2
+  with:
+    node-version-file: .node-version
+```
+
+Plain version files must contain one selector. `.nvmrc` comments are accepted,
+and common nvm selectors are translated to pnpm's equivalents: `node` and
+`stable` become `latest`, `lts/*` becomes `lts`, and `lts/<name>` becomes the
+LTS name. In `.tool-versions`, the first version after `node` or `nodejs` is
+used. Values that pnpm cannot install, such as `system`, `path:...`, and
+`ref:...`, fail the setup step.
+
+When no `runtime` input is present, the file adds Node.js and leaves any Bun or
+Deno declarations in `devEngines.runtime` intact. `runtime: node` takes its
+version from the file, while `runtime: node@22` remains authoritative.
+
 ### Matrix: test on multiple Node versions
 
 ```yaml
@@ -108,7 +128,8 @@ When the project is not at the repository root — a site in `docs/`, an app in
 ```
 
 `pnpm install` then runs in `docs`, `packageManager` and `devEngines` are read
-from `docs/package.json`, and the cache key comes from `docs/pnpm-lock.yaml`.
+from `docs/package.json`, `node-version-file` resolves from `docs`, and the
+cache key comes from `docs/pnpm-lock.yaml`.
 Set `cache-dependency-path` yourself and it stays relative to the repository
 root, as it has always been — only its default follows the working directory.
 Without this the install runs at the repository root,
