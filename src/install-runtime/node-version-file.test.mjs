@@ -34,6 +34,10 @@ test('invalid or unsupported version files fail clearly', () => {
     () => parseNodeVersionFile('system\n', '.node-version'),
     /pnpm cannot install/,
   )
+  assert.throws(
+    () => parseNodeVersionFile('lts/\n', '.nvmrc'),
+    /invalid Node\.js version selector/,
+  )
 })
 
 test('node-version-file resolves relative to working-directory', t => {

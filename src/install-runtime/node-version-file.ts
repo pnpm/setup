@@ -62,7 +62,13 @@ function normalizeNodeVersion(version: string, fileName: string): string {
   const lowered = version.toLowerCase()
   if (lowered === 'node' || lowered === 'stable') return 'latest'
   if (lowered === 'lts/*') return 'lts'
-  if (lowered.startsWith('lts/') && version.length > 4) return version.slice(4)
+  if (lowered.startsWith('lts/')) {
+    const ltsName = version.slice(4)
+    if (!ltsName || ltsName.includes('/')) {
+      throw new Error(`${fileName} contains an invalid Node.js version selector: ${version}`)
+    }
+    return ltsName
+  }
 
   const unsupportedAlias = ['system', 'current', 'iojs', 'unstable'].includes(lowered)
   if (unsupportedAlias || /^(?:path|ref):/i.test(version)) {
