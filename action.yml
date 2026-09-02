@@ -123,7 +123,7 @@ outputs:
   runtimes:
     description: JSON array of installed runtimes, each containing `name` and `version`
   cache-hit:
-    description: Whether the pnpm store cache matched the exact primary key
+    description: Whether the restored cache matched the current lockfile exactly, rather than falling back to a store cached for a different lockfile
 runs:
   using: node24
   main: dist/index.js

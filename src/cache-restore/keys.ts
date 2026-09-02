@@ -10,13 +10,29 @@ export function getCacheKeyPrefix(
   return `pnpm-cache-${runnerOs}-${architecture}-${runtimeKey}-`
 }
 
-export function getPrimaryCacheKey(
-  keyPrefix: string,
-  fileHash: string,
-  resolvedRuntimes: readonly RuntimeRequest[] = [],
+export function getSaveCacheKey(
+  lockfileKeyPrefix: string,
+  resolvedRuntimes: readonly RuntimeRequest[],
+  runId: string,
 ): string {
   const runtimeVersionKey = resolvedRuntimes.length > 0 ? `${hashRuntimes(resolvedRuntimes)}-` : ''
-  return `${keyPrefix}${runtimeVersionKey}${fileHash}`
+  return `${lockfileKeyPrefix}${runtimeVersionKey}${runId}`
+}
+
+/**
+ * `restoreCache`'s fallback list, most specific first: an exact lockfile
+ * match, then any store for this OS/arch/runtime combination regardless of
+ * lockfile. `lockfileKeyPrefix` also has to be passed as the primary key —
+ * see `getSaveCacheKey` — but it can never match there, since every save
+ * appends a run id; the match always happens here, in the fallback search.
+ */
+export function getRestoreKeys(lockfileKeyPrefix: string, keyPrefix: string): string[] {
+  return [lockfileKeyPrefix, keyPrefix]
+}
+
+/** True only when the restored store was cached for this exact lockfile, not a fallback match. */
+export function isLockfileExactHit(restoredKey: string | undefined, lockfileKeyPrefix: string): boolean {
+  return restoredKey?.startsWith(lockfileKeyPrefix) ?? false
 }
 
 /**
