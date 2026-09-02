@@ -22,6 +22,8 @@ export interface Inputs {
   /** The manifest to read config from, relative to GITHUB_WORKSPACE. */
   readonly packageJsonFile: string
   readonly runtime?: RuntimeInput
+  /** Node version file path, relative to `workingDirectory`. */
+  readonly nodeVersionFile?: string
   readonly install: boolean
   /** Whether a lockfile must already exist and fully describe the install. */
   readonly requireLockfile: boolean
@@ -132,6 +134,7 @@ export const getInputs = (): Inputs => ({
   cache: getBooleanInput('cache'),
   ...resolveProjectPaths(),
   runtime: parseRuntime(),
+  nodeVersionFile: getInput('node-version-file').trim() || undefined,
   install: getBooleanInput('install'),
   requireLockfile: getBooleanInput('require-lockfile'),
   token: getInput('token') || undefined,
