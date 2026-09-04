@@ -3,13 +3,18 @@ import assert from 'node:assert/strict'
 import { buildRegistryAuthArgs } from './registry.ts'
 
 describe('buildRegistryAuthArgs', () => {
-  it('returns config set args for the given registry and token', () => {
+  it('uses protocol-relative key form with trailing slash', () => {
     const args = buildRegistryAuthArgs('https://example.jfrog.io/npm/', 'mytoken')
-    assert.deepEqual(args, ['config', 'set', 'https://example.jfrog.io/npm//:_authToken', 'mytoken'])
+    assert.deepEqual(args, ['config', 'set', '//example.jfrog.io/npm/:_authToken', 'mytoken'])
   })
 
-  it('appends trailing slash to registry URL if missing', () => {
+  it('normalises missing trailing slash on the path', () => {
     const args = buildRegistryAuthArgs('https://example.jfrog.io/npm', 'mytoken')
-    assert.deepEqual(args, ['config', 'set', 'https://example.jfrog.io/npm//:_authToken', 'mytoken'])
+    assert.deepEqual(args, ['config', 'set', '//example.jfrog.io/npm/:_authToken', 'mytoken'])
+  })
+
+  it('works with a bare hostname registry', () => {
+    const args = buildRegistryAuthArgs('https://registry.example.com/', 'tok')
+    assert.deepEqual(args, ['config', 'set', '//registry.example.com/:_authToken', 'tok'])
   })
 })
