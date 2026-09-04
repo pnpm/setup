@@ -32,8 +32,6 @@ const options: InputOptions = {
   required: true,
 }
 
-const parseInputPath = (name: string) => expandTilde(getInput(name, options))
-
 function parseRuntime(): RuntimeInput | undefined {
   const raw = getInput('runtime').trim()
   if (!raw) return undefined
@@ -128,7 +126,7 @@ function isSupportedRuntime(name: string): name is RuntimeName {
 
 export const getInputs = (): Inputs => ({
   version: getInput('version'),
-  dest: parseInputPath('dest'),
+  dest: path.resolve(expandTilde(getInput('dest', options))),
   cache: getBooleanInput('cache'),
   ...resolveProjectPaths(),
   runtime: parseRuntime(),
