@@ -48,14 +48,11 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
     return
   }
 
-  // spawnSync inherits process.env, which already has $PNPM_HOME/bin and
-  // $PNPM_HOME prepended via addPath() in install-pnpm — so the pnpm this
-  // action installed (or a self-updated one) is the one that resolves.
+  const pnpmBin = path.join(inputs.dest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
   startGroup(`Running ${command}...`)
-  const { error, status, signal } = spawnSync('pnpm', args, {
+  const { error, status, signal } = spawnSync(pnpmBin, args, {
     stdio: 'inherit',
     cwd: workingDirectory,
-    shell: true,
   })
   endGroup()
 
