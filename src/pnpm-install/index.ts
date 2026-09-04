@@ -3,6 +3,7 @@ import { spawnSync } from 'child_process'
 import { existsSync } from 'fs'
 import path from 'path'
 import { Inputs } from '../inputs'
+import { buildRegistryAuthArgs } from './registry'
 
 export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs.runtime)) {
   const args = ['install']
@@ -46,6 +47,22 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
       '`require-lockfile` to let pnpm resolve and write one.',
     )
     return
+  }
+
+  if (inputs.registry) {
+    const configArgs = buildRegistryAuthArgs(inputs.registry.registryUrl, inputs.registry.registryToken)
+    const configCommand = `pnpm ${configArgs.join(' ')}`
+    startGroup(`Running ${configCommand}...`)
+    const configResult = spawnSync('pnpm', configArgs, { stdio: 'inherit', shell: true })
+    endGroup()
+    if (configResult.error) {
+      setFailed(configResult.error)
+      return
+    }
+    if (configResult.status !== 0) {
+      setFailed(`${configCommand} exited with status ${configResult.status}`)
+      return
+    }
   }
 
   // spawnSync inherits process.env, which already has $PNPM_HOME/bin and

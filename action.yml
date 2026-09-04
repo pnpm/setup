@@ -103,6 +103,18 @@ inputs:
       need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration).
     required: false
     default: 'true'
+  registry-url:
+    description: |
+      Base URL of a private npm registry to authenticate against, e.g.
+      `https://myorg.jfrog.io/artifactory/api/npm/npm-local/`. When set,
+      `registry-token` must also be provided. The action runs
+      `pnpm config set "<url>//:_authToken" "<token>"` before installing.
+    required: false
+  registry-token:
+    description: |
+      Auth token for the private registry specified in `registry-url`.
+      Pass this via a GitHub secret — it will not appear in logs.
+    required: false
   token:
     description: >
       No longer used. pnpm is fetched from the npm registry and verified

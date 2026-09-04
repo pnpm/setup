@@ -1,4 +1,5 @@
-import { getBooleanInput, getInput, InputOptions } from '@actions/core'
+import { getBooleanInput, getInput } from '@actions/core'
+import type { InputOptions } from '@actions/core'
 import expandTilde from 'expand-tilde'
 import { existsSync } from 'fs'
 import path from 'path'
@@ -10,6 +11,11 @@ const SUPPORTED_RUNTIMES: readonly RuntimeName[] = ['node', 'bun', 'deno']
 export interface RuntimeInput {
   readonly name: RuntimeName
   readonly version?: string
+}
+
+export interface RegistryConfig {
+  readonly registryUrl: string
+  readonly registryToken: string
 }
 
 export interface Inputs {
@@ -26,6 +32,7 @@ export interface Inputs {
   /** Whether a lockfile must already exist and fully describe the install. */
   readonly requireLockfile: boolean
   readonly token?: string
+  readonly registry?: RegistryConfig
 }
 
 const options: InputOptions = {
@@ -126,6 +133,17 @@ function isSupportedRuntime(name: string): name is RuntimeName {
   return (SUPPORTED_RUNTIMES as readonly string[]).includes(name)
 }
 
+export function validateRegistryInputs(registryUrl: string, registryToken: string): RegistryConfig | undefined {
+  if (registryUrl && !registryToken) {
+    throw new Error('`registry-token` is required when `registry-url` is set')
+  }
+  if (registryToken && !registryUrl) {
+    throw new Error('`registry-url` is required when `registry-token` is set')
+  }
+  if (!registryUrl && !registryToken) return undefined
+  return { registryUrl, registryToken }
+}
+
 export const getInputs = (): Inputs => ({
   version: getInput('version'),
   dest: parseInputPath('dest'),
@@ -135,6 +153,10 @@ export const getInputs = (): Inputs => ({
   install: getBooleanInput('install'),
   requireLockfile: getBooleanInput('require-lockfile'),
   token: getInput('token') || undefined,
+  registry: validateRegistryInputs(
+    getInput('registry-url').trim(),
+    getInput('registry-token').trim(),
+  ),
 })
 
 export default getInputs
