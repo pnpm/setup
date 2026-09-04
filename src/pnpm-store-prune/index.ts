@@ -1,5 +1,6 @@
 import { warning, startGroup, endGroup } from '@actions/core'
 import { spawnSync } from 'child_process'
+import path from 'path'
 import { Inputs } from '../inputs'
 
 export function pruneStore(inputs: Inputs) {
@@ -9,9 +10,9 @@ export function pruneStore(inputs: Inputs) {
   }
 
   startGroup('Running pnpm store prune...')
-  const { error, status } = spawnSync('pnpm', ['store', 'prune'], {
+  const pnpmBin = path.join(inputs.dest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
+  const { error, status } = spawnSync(pnpmBin, ['store', 'prune'], {
     stdio: 'inherit',
-    shell: true,
   })
   endGroup()
 
