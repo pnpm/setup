@@ -1,4 +1,6 @@
 export function buildRegistryAuthArgs(registryUrl: string, registryToken: string): string[] {
-  const url = registryUrl.endsWith('/') ? registryUrl : `${registryUrl}/`
-  return ['config', 'set', `${url}/:_authToken`, registryToken]
+  const parsed = new URL(registryUrl)
+  const path = parsed.pathname.endsWith('/') ? parsed.pathname : `${parsed.pathname}/`
+  const key = `//${parsed.host}${path}:_authToken`
+  return ['config', 'set', key, registryToken]
 }
