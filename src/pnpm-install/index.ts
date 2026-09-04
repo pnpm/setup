@@ -1,8 +1,9 @@
-import { info, setFailed, startGroup, endGroup } from '@actions/core'
+import { info, setFailed, setSecret, startGroup, endGroup } from '@actions/core'
 import { spawnSync } from 'child_process'
 import { existsSync } from 'fs'
 import path from 'path'
 import { Inputs } from '../inputs'
+import { buildRegistryAuthArgs } from './registry'
 
 export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs.runtime)) {
   const args = ['install']
@@ -46,6 +47,22 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
       '`require-lockfile` to let pnpm resolve and write one.',
     )
     return
+  }
+
+  if (inputs.registry) {
+    setSecret(inputs.registry.registryToken)
+    const configArgs = buildRegistryAuthArgs(inputs.registry.registryUrl, inputs.registry.registryToken)
+    startGroup('Configuring private registry auth...')
+    const configResult = spawnSync('pnpm', configArgs, { stdio: 'inherit' })
+    endGroup()
+    if (configResult.error) {
+      setFailed(configResult.error)
+      return
+    }
+    if (configResult.status !== 0) {
+      setFailed(`pnpm config set for private registry exited with status ${configResult.status}`)
+      return
+    }
   }
 
   // spawnSync inherits process.env, which already has $PNPM_HOME/bin and

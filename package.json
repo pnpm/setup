@@ -4,7 +4,7 @@
     "build:bundle": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=cjs --minify --outfile=dist/index.js",
     "build": "pnpm run build:bundle",
     "start": "pnpm run build && sh ./run.sh",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test src/cache-restore/*.test.mjs"
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test src/cache-restore/*.test.mjs src/inputs/*.test.mjs src/pnpm-install/*.test.mjs"
   },
   "dependencies": {
     "@actions/cache": "^6.2.0",
