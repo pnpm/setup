@@ -3,6 +3,7 @@ import { spawnSync } from 'child_process'
 import { existsSync } from 'fs'
 import path from 'path'
 import { Inputs } from '../inputs'
+import { findLockfile, findWorkspaceRoot } from './lockfile'
 
 export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs.runtime)) {
   const args = ['install']
@@ -39,13 +40,19 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
   // Answer this before running anything: a missing lockfile is the whole
   // reason `require-lockfile` exists, and pnpm's own error for it arrives
   // after an install that was never going to succeed.
-  if (inputs.requireLockfile && !findLockfile(workingDirectory, GITHUB_WORKSPACE)) {
-    setFailed(
-      '`require-lockfile` is set but no pnpm-lock.yaml was found in ' +
-      `${inputs.workingDirectory} or above it. Commit the lockfile, or unset ` +
-      '`require-lockfile` to let pnpm resolve and write one.',
-    )
-    return
+  if (inputs.requireLockfile) {
+    const searchRoot = findWorkspaceRoot(workingDirectory) ?? workingDirectory
+    if (!findLockfile(workingDirectory, searchRoot, GITHUB_WORKSPACE)) {
+      const searched = searchRoot === workingDirectory
+        ? inputs.workingDirectory
+        : `${inputs.workingDirectory} or above it`
+      setFailed(
+        '`require-lockfile` is set but no pnpm-lock.yaml was found in ' +
+        `${searched}. Commit the lockfile, or unset ` +
+        '`require-lockfile` to let pnpm resolve and write one.',
+      )
+      return
+    }
   }
 
   const pnpmBin = path.join(inputs.dest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
@@ -68,25 +75,6 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
   }
   if (status !== 0) {
     setFailed(`${command} exited with status ${status}`)
-  }
-}
-
-/**
- * pnpm keeps the lockfile at the workspace root, which it finds by walking up
- * from wherever it runs — so a project that is a workspace member has its
- * lockfile above itself. Search the same way rather than only where the
- * install runs, or a member directory would be reported as having none.
- */
-function findLockfile(from: string, workspaceRoot: string): string | undefined {
-  let current = from
-  for (;;) {
-    const candidate = path.join(current, 'pnpm-lock.yaml')
-    if (existsSync(candidate)) return candidate
-    if (current === workspaceRoot) return undefined
-
-    const parent = path.dirname(current)
-    if (parent === current) return undefined
-    current = parent
   }
 }
 
