@@ -11,6 +11,22 @@ permissions:
   contents: read
 
 jobs:
+  pnpm-commands:
+    name: 'pnpm command execution (${{ matrix.os }})'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./
+        with:
+          version: '12.0.0'
+          runtime: node@24
+      - name: Test command execution and reject deprecation warnings
+        run: node --throw-deprecation --test src/pnpm-commands.test.mjs
+
   smoke:
     # Direct binary download + pnpm on PATH across OSes and architectures.
     name: 'Smoke (${{ matrix.os }} / pnpm ${{ matrix.version }})'
@@ -1051,4 +1067,3 @@ jobs:
             echo "Expected a plain install to write a lockfile"; exit 1
           fi
         shell: bash
-
