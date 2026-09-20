@@ -13,19 +13,13 @@ export function getCacheKeyPrefix(
 export function getSaveCacheKey(
   lockfileKeyPrefix: string,
   resolvedRuntimes: readonly RuntimeRequest[],
-  runId: string,
+  invocationId: string,
 ): string {
   const runtimeVersionKey = resolvedRuntimes.length > 0 ? `${hashRuntimes(resolvedRuntimes)}-` : ''
-  return `${lockfileKeyPrefix}${runtimeVersionKey}${runId}`
+  return `${lockfileKeyPrefix}${runtimeVersionKey}${invocationId}`
 }
 
-/**
- * `restoreCache`'s fallback list, most specific first: an exact lockfile
- * match, then any store for this OS/arch/runtime combination regardless of
- * lockfile. `lockfileKeyPrefix` also has to be passed as the primary key —
- * see `getSaveCacheKey` — but it can never match there, since every save
- * appends a run id; the match always happens here, in the fallback search.
- */
+/** Prefer the latest entry for this lockfile before falling back to another lockfile. */
 export function getRestoreKeys(lockfileKeyPrefix: string, keyPrefix: string): string[] {
   return [lockfileKeyPrefix, keyPrefix]
 }

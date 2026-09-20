@@ -21,7 +21,7 @@ test('save keys for the same run and lockfile differ by resolved runtime version
   assert.ok(currentVersionKey.startsWith(lockfileKeyPrefix))
 })
 
-test('save keys for the same run and version differ by run id, so no save is ever restored within its own run', () => {
+test('save keys differ by invocation identity', () => {
   const prefix = getCacheKeyPrefix('Linux', 'x64', [{ name: 'node', version: '24.19.0' }])
   const lockfileKeyPrefix = `${prefix}lockfile-hash-`
 
@@ -32,9 +32,6 @@ test('save keys for the same run and version differ by run id, so no save is eve
 })
 
 test('save keys for a re-run of the same run id differ by run attempt', () => {
-  // finalizeCache composes the run identity as `${runId}-${runAttempt}`, since
-  // GITHUB_RUN_ID stays fixed across a manual re-run — only GITHUB_RUN_ATTEMPT
-  // increments. Modeled here as the composed string keys.ts actually receives.
   const prefix = getCacheKeyPrefix('Linux', 'x64', [{ name: 'node', version: '24.19.0' }])
   const lockfileKeyPrefix = `${prefix}lockfile-hash-`
 
@@ -44,7 +41,7 @@ test('save keys for a re-run of the same run id differ by run attempt', () => {
   assert.notEqual(firstAttempt, secondAttempt)
 })
 
-test('without a resolved runtime the save key is just the lockfile prefix and run id', () => {
+test('without a resolved runtime the save key is just the lockfile prefix and invocation identity', () => {
   const prefix = getCacheKeyPrefix('Linux', 'x64', [])
   const lockfileKeyPrefix = `${prefix}lockfile-hash-`
 

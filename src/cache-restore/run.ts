@@ -2,6 +2,7 @@ import { restoreCache } from '@actions/cache'
 import { debug, info, saveState, setOutput } from '@actions/core'
 import { getExecOutput } from '@actions/exec'
 import { hashFiles } from '@actions/glob'
+import { randomUUID } from 'crypto'
 import os from 'os'
 import { Inputs } from '../inputs'
 import { RuntimeRequest } from '../install-runtime'
@@ -62,17 +63,14 @@ async function runRestoreStoreCache(
 }
 
 export function finalizeCache(cache: RestoredCache, resolvedRuntimes: readonly RuntimeRequest[]) {
-  // GITHUB_RUN_ID alone is not enough: a manual re-run keeps the same run id
-  // and only bumps GITHUB_RUN_ATTEMPT, so without it a re-run would target
-  // the same immutable key its failed predecessor already published.
   const runId = process.env.GITHUB_RUN_ID ?? ''
   const runAttempt = process.env.GITHUB_RUN_ATTEMPT ?? ''
-  const primaryKey = getSaveCacheKey(cache.lockfileKeyPrefix, resolvedRuntimes, `${runId}-${runAttempt}`)
+  // Jobs, matrix entries, and repeated action steps share the run identity.
+  const invocationId = `${runId}-${runAttempt}-${randomUUID()}`
+  const primaryKey = getSaveCacheKey(cache.lockfileKeyPrefix, resolvedRuntimes, invocationId)
   debug(`Primary key is ${primaryKey}`)
   saveState('cache_primary_key', primaryKey)
 
-  // No save is ever restored within its own run, so "hit" here means the
-  // lockfile matched exactly (best case), not that a save was skipped.
   setOutput('cache-hit', isLockfileExactHit(cache.restoredKey, cache.lockfileKeyPrefix))
 }
 

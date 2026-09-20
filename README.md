@@ -197,11 +197,16 @@ the registry, writes one and exits `0`. Set `require-lockfile` when a missing
 lockfile should fail the job instead of silently installing unpinned
 dependencies.
 
-Every job that saves a cache does so under a key unique to that run, and
-restoring falls back to the most recent entry for the current lockfile. This
-means a job that gets cancelled or fails mid-install can never pin a partial
+Every action invocation that saves a cache uses its own unique key, including
+matrix jobs, repeated steps, and workflow re-runs. Restoration looks for the
+most recent entry for the current lockfile. This means a job that gets
+cancelled or fails mid-install can never pin a partial
 store under a key later runs are stuck matching — the next successful run
 simply publishes a fresher entry.
+
+Each save creates a new cache entry, even when the lockfile is unchanged.
+Large matrix workflows therefore use more cache storage and can evict older
+entries sooner.
 
 ### Skip `pnpm install`
 
