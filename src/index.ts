@@ -86,7 +86,7 @@ async function runPost() {
   // installed, the log was already saved then. Runs before the prune because
   // pnpm versions before pnpm/pnpm#13893 delete the log during one.
   await saveVerificationCache()
-  pruneStore(inputs)
+  await pruneStore(inputs)
   await saveCache(inputs)
 }
 
