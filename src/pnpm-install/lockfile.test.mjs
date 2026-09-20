@@ -17,7 +17,7 @@ afterEach(() => {
 })
 
 function temporaryDirectory() {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'setup workspace & ')))
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'setup workspace & ')))
   fixtures.push(root)
   return root
 }
