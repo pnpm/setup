@@ -5,8 +5,6 @@ import { beforeEach, test } from 'node:test'
 import { build } from 'esbuild'
 import { getCacheKeyPrefix } from './keys.ts'
 
-// Bundle the production flow with fake service boundaries, so tests exercise
-// the actual state handoff between the main action and its post step.
 const mocks = {
   '@actions/cache': `
     import { mock } from 'node:test'

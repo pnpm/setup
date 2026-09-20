@@ -65,7 +65,6 @@ async function runRestoreStoreCache(
 export function finalizeCache(cache: RestoredCache, resolvedRuntimes: readonly RuntimeRequest[]) {
   const runId = process.env.GITHUB_RUN_ID ?? ''
   const runAttempt = process.env.GITHUB_RUN_ATTEMPT ?? ''
-  // Jobs, matrix entries, and repeated action steps share the run identity.
   const invocationId = `${runId}-${runAttempt}-${randomUUID()}`
   const primaryKey = getSaveCacheKey(cache.lockfileKeyPrefix, resolvedRuntimes, invocationId)
   debug(`Primary key is ${primaryKey}`)

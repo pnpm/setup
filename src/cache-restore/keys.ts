@@ -19,12 +19,10 @@ export function getSaveCacheKey(
   return `${lockfileKeyPrefix}${runtimeVersionKey}${invocationId}`
 }
 
-/** Prefer the latest entry for this lockfile before falling back to another lockfile. */
 export function getRestoreKeys(lockfileKeyPrefix: string, keyPrefix: string): string[] {
   return [lockfileKeyPrefix, keyPrefix]
 }
 
-/** True only when the restored store was cached for this exact lockfile, not a fallback match. */
 export function isLockfileExactHit(restoredKey: string | undefined, lockfileKeyPrefix: string): boolean {
   return restoredKey?.startsWith(lockfileKeyPrefix) ?? false
 }
