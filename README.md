@@ -265,6 +265,49 @@ Each save creates a new cache entry, even when the lockfile is unchanged.
 Large matrix workflows therefore use more cache storage and can evict older
 entries sooner.
 
+### Private registries
+
+With pnpm 11.10.0 or newer, set `pnpm_config__auth` to configure registry URLs
+and tokens together. Use YAML's `|` block to keep the JSON readable. For
+example, to install `@myorg/*` packages from GitHub Packages:
+
+```yaml
+- uses: pnpm/setup@v2
+  env:
+    pnpm_config__auth: |
+      {
+        "https://npm.pkg.github.com": {
+          "@myorg": {
+            "authToken": ${{ toJSON(secrets.PACKAGES_TOKEN) }}
+          }
+        }
+      }
+```
+
+Use `"@"` for a registry-wide default token. This also selects that URL as the
+default registry:
+
+```yaml
+- uses: pnpm/setup@v2
+  env:
+    pnpm_config__auth: |
+      {
+        "https://registry.npmjs.org": {
+          "@": {
+            "authToken": ${{ toJSON(secrets.NPM_TOKEN) }}
+          }
+        }
+      }
+```
+
+`toJSON` quotes and escapes each secret for JSON. You can combine multiple
+registries and scopes in the same object; a scope-specific token takes
+precedence over the registry-wide default for that scope.
+
+Step-level `env` covers this action's automatic install. If later steps also
+need authentication, set the variable on those steps or at the job level.
+See pnpm's [`_auth` documentation](https://pnpm.io/npmrc#_auth) for details.
+
 ### Skip `pnpm install`
 
 For jobs that only need pnpm itself — e.g. `pnpm audit`, lockfile-only regeneration — set `install: false`:
