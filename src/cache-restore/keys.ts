@@ -10,13 +10,21 @@ export function getCacheKeyPrefix(
   return `pnpm-cache-${runnerOs}-${architecture}-${runtimeKey}-`
 }
 
-export function getPrimaryCacheKey(
-  keyPrefix: string,
-  fileHash: string,
-  resolvedRuntimes: readonly RuntimeRequest[] = [],
+export function getSaveCacheKey(
+  lockfileKeyPrefix: string,
+  resolvedRuntimes: readonly RuntimeRequest[],
+  invocationId: string,
 ): string {
   const runtimeVersionKey = resolvedRuntimes.length > 0 ? `${hashRuntimes(resolvedRuntimes)}-` : ''
-  return `${keyPrefix}${runtimeVersionKey}${fileHash}`
+  return `${lockfileKeyPrefix}${runtimeVersionKey}${invocationId}`
+}
+
+export function getRestoreKeys(lockfileKeyPrefix: string, keyPrefix: string): string[] {
+  return [lockfileKeyPrefix, keyPrefix]
+}
+
+export function isLockfileExactHit(restoredKey: string | undefined, lockfileKeyPrefix: string): boolean {
+  return restoredKey?.startsWith(lockfileKeyPrefix) ?? false
 }
 
 /**

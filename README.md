@@ -37,7 +37,7 @@ Only one version of each runtime can be installed globally. If a runtime name is
 | `runtime-name` | Name of the first installed runtime, or empty string if none was installed. |
 | `runtime-version` | Resolved version of the first installed runtime, or empty string if none was installed. |
 | `runtimes` | JSON array of every installed runtime in declaration order, as `{ "name": string, "version": string }` objects. Returns `[]` when none were installed. |
-| `cache-hit` | Whether the pnpm store cache matched the exact primary key. |
+| `cache-hit` | Whether the restored cache matched the current lockfile exactly, rather than falling back to a store cached for a different lockfile. |
 
 ## Usage
 
@@ -196,6 +196,17 @@ require a lockfile to exist: with none at all, `pnpm install` resolves from
 the registry, writes one and exits `0`. Set `require-lockfile` when a missing
 lockfile should fail the job instead of silently installing unpinned
 dependencies.
+
+Every action invocation that saves a cache uses its own unique key, including
+matrix jobs, repeated steps, and workflow re-runs. Restoration looks for the
+most recent entry for the current lockfile. This means a job that gets
+cancelled or fails mid-install can never pin a partial
+store under a key later runs are stuck matching — the next successful run
+simply publishes a fresher entry.
+
+Each save creates a new cache entry, even when the lockfile is unchanged.
+Large matrix workflows therefore use more cache storage and can evict older
+entries sooner.
 
 ### Skip `pnpm install`
 
