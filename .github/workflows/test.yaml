@@ -1154,3 +1154,30 @@ jobs:
             echo "Expected the nested project to install is-even"; exit 1
           fi
         shell: bash
+
+      - name: Make the nested project a member of a workspace instead
+        # The other branch: the lockfile a member installs from is the
+        # workspace root's, so its own is neither needed nor consulted.
+        run: |
+          set -e
+          rm -rf nested/node_modules nested/pnpm-lock.yaml
+          printf "packages:\n  - 'nested'\n" > pnpm-workspace.yaml
+          pnpm install --lockfile-only
+          if [ -f nested/pnpm-lock.yaml ]; then
+            echo "Expected the workspace to keep one lockfile, at its root"; exit 1
+          fi
+        shell: bash
+
+      - uses: ./
+        with:
+          version: '12.0.0'
+          working-directory: nested
+          require-lockfile: true
+
+      - name: 'Test: the member installed from the workspace root lockfile'
+        run: |
+          set -e
+          if [ ! -d nested/node_modules/is-even ]; then
+            echo "Expected the member to install is-even"; exit 1
+          fi
+        shell: bash

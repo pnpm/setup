@@ -244,11 +244,12 @@ Fails unless `pnpm-lock.yaml` already describes the install, and runs
 action fails before running pnpm, saying so directly rather than through an
 install that was never going to succeed.
 
-Where it looks is where pnpm would: at the workspace root when
+Where it looks is where pnpm reads one: at the workspace root when
 `working-directory` is one of the workspace's projects, and in
-`working-directory` alone when it is not. A directory with a `package.json` of
-its own that the workspace's `packages` patterns do not select is a standalone
-project, and it needs a lockfile of its own.
+`working-directory` itself when it is not, or when the workspace sets
+`sharedWorkspaceLockfile: false`. A directory with a `package.json` of its own
+that the workspace's `packages` patterns do not select is a standalone project,
+and it needs a lockfile of its own.
 
 This is narrower than it sounds, and worth understanding before reaching for
 it. pnpm refuses to update an *existing* lockfile when it detects CI, and

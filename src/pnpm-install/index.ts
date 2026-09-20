@@ -3,7 +3,7 @@ import { spawnSync } from 'child_process'
 import { existsSync } from 'fs'
 import path from 'path'
 import { Inputs } from '../inputs'
-import { findLockfile, findWorkspaceRoot } from './lockfile'
+import { lockfileDir } from './lockfile'
 
 export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs.runtime)) {
   const args = ['install']
@@ -41,15 +41,14 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
   // reason `require-lockfile` exists, and pnpm's own error for it arrives
   // after an install that was never going to succeed.
   if (inputs.requireLockfile) {
-    const searchRoot = findWorkspaceRoot(workingDirectory) ?? workingDirectory
-    if (!findLockfile(workingDirectory, searchRoot, GITHUB_WORKSPACE)) {
-      const searched = searchRoot === workingDirectory
-        ? inputs.workingDirectory
-        : `${inputs.workingDirectory} or above it`
+    const lockfileDirectory = lockfileDir(workingDirectory)
+    if (!existsSync(path.join(lockfileDirectory, 'pnpm-lock.yaml'))) {
+      const searched = path.relative(GITHUB_WORKSPACE, lockfileDirectory) || '.'
       setFailed(
         '`require-lockfile` is set but no pnpm-lock.yaml was found in ' +
-        `${searched}. Commit the lockfile, or unset ` +
-        '`require-lockfile` to let pnpm resolve and write one.',
+        `${searched}, which is where an install in ${inputs.workingDirectory} ` +
+        'reads one. Commit the lockfile, or unset `require-lockfile` to let ' +
+        'pnpm resolve and write one.',
       )
       return
     }

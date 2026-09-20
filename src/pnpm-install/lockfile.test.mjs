@@ -3,52 +3,71 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { findLockfile } from './lockfile.ts'
+import {
+  chooseLockfileDir,
+  findWorkspaceRoot,
+  keepsLockfilePerProject,
+  lockfileDir,
+} from './lockfile.ts'
 
-/**
- * A workspace whose `packages` leave `docs` out, installed from the root: the
- * lockfile sits at the root and nowhere else.
- */
-function prepareWorkspace() {
+function prepareWorkspace({ packages = "['packages/**']", settings = '' } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'setup-')))
-  fs.mkdirSync(path.join(root, 'packages/pkg-1'), { recursive: true })
-  fs.mkdirSync(path.join(root, 'docs'), { recursive: true })
-  fs.writeFileSync(path.join(root, 'pnpm-lock.yaml'), '')
+  fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), `packages: ${packages}\n${settings}`)
+  fs.writeFileSync(path.join(root, 'package.json'), '{"name":"root","version":"0.0.0"}')
+  for (const project of ['packages/pkg-1', 'standalone']) {
+    fs.mkdirSync(path.join(root, project), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, project, 'package.json'),
+      `{"name":"${path.basename(project)}","version":"0.0.0"}`,
+    )
+  }
   return root
 }
 
-test('a project the workspace contains finds the lockfile above it', () => {
+test('a project the workspace contains reads the root lockfile, not one beside itself', () => {
   const root = prepareWorkspace()
   const member = path.join(root, 'packages/pkg-1')
 
-  assert.equal(findLockfile(member, root, root), path.join(root, 'pnpm-lock.yaml'))
+  assert.equal(chooseLockfileDir(member, root, false), root)
 })
 
-test('a project the workspace leaves out does not borrow the lockfile above it', () => {
+test('a workspace keeping a lockfile per project reads its own', () => {
   const root = prepareWorkspace()
-  const standalone = path.join(root, 'docs')
+  const member = path.join(root, 'packages/pkg-1')
 
-  // `searchRoot` is the directory itself, which is what `pnpm root -w` failing
-  // reports: pnpm installs this project on its own, so the root's lockfile
-  // does not describe the install (pnpm/pnpm#3561).
-  assert.equal(findLockfile(standalone, standalone, root), undefined)
+  assert.equal(chooseLockfileDir(member, root, true), member)
 })
 
-test('a project the workspace leaves out finds a lockfile of its own', () => {
+test('a project no workspace contains reads its own lockfile', () => {
   const root = prepareWorkspace()
-  const standalone = path.join(root, 'docs')
-  fs.writeFileSync(path.join(standalone, 'pnpm-lock.yaml'), '')
+  const standalone = path.join(root, 'standalone')
 
+  assert.equal(chooseLockfileDir(standalone, undefined, false), standalone)
+})
+
+test('pnpm reports the workspace root from a project it contains', () => {
+  const root = prepareWorkspace()
+
+  assert.equal(findWorkspaceRoot(path.join(root, 'packages/pkg-1')), root)
+})
+
+test('pnpm reports no workspace from a directory outside one', () => {
+  const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'setup-')))
+  fs.writeFileSync(path.join(outside, 'package.json'), '{"name":"alone","version":"0.0.0"}')
+
+  assert.equal(findWorkspaceRoot(outside), undefined)
+})
+
+test('the lockfile directory follows sharedWorkspaceLockfile', () => {
+  const shared = prepareWorkspace()
+  const perProject = prepareWorkspace({ settings: 'sharedWorkspaceLockfile: false\n' })
+
+  assert.equal(keepsLockfilePerProject(path.join(shared, 'packages/pkg-1')), false)
+  assert.equal(lockfileDir(path.join(shared, 'packages/pkg-1')), shared)
+
+  assert.equal(keepsLockfilePerProject(path.join(perProject, 'packages/pkg-1')), true)
   assert.equal(
-    findLockfile(standalone, standalone, root),
-    path.join(standalone, 'pnpm-lock.yaml'),
+    lockfileDir(path.join(perProject, 'packages/pkg-1')),
+    path.join(perProject, 'packages/pkg-1'),
   )
-})
-
-test('the climb stops at the checkout even when pnpm reports a root above it', () => {
-  const root = prepareWorkspace()
-  const checkout = path.join(root, 'packages')
-  const member = path.join(checkout, 'pkg-1')
-
-  assert.equal(findLockfile(member, root, checkout), undefined)
 })
