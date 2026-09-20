@@ -142,7 +142,23 @@ export function validateRegistryInputs(registryUrl: string, registryToken: strin
     throw new Error('`registry-url` is required when `registry-token` is set')
   }
   if (!registryUrl && !registryToken) return undefined
-  return { registryUrl, registryToken }
+  let parsed: URL
+  try {
+    parsed = new URL(registryUrl)
+  } catch {
+    throw new Error('`registry-url` must be an absolute HTTPS URL')
+  }
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback)) {
+    throw new Error('`registry-url` must use HTTPS (HTTP is only allowed for loopback registries)')
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash || /[=\r\n\0]/.test(registryUrl)) {
+    throw new Error('`registry-url` must not contain credentials, query parameters, fragments, or an equals sign')
+  }
+  if (/[\r\n\0]/.test(registryToken)) {
+    throw new Error('`registry-token` must not contain line breaks or null bytes')
+  }
+  return { registryUrl: parsed.href, registryToken }
 }
 
 export const getInputs = (): Inputs => ({

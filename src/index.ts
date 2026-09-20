@@ -1,4 +1,4 @@
-import { setFailed, saveState, getState } from '@actions/core'
+import { setFailed, setSecret, saveState, getState } from '@actions/core'
 import restoreCache, { finalizeCache } from './cache-restore'
 import saveCache from './cache-save'
 import getInputs, { Inputs } from './inputs'
@@ -26,7 +26,9 @@ async function main() {
 
 async function runMain() {
   const inputs = getInputs()
-  saveState('inputs', inputs)
+  if (inputs.registry) setSecret(inputs.registry.registryToken)
+  delete process.env['INPUT_REGISTRY-TOKEN']
+  saveState('inputs', { ...inputs, registry: undefined })
   saveState('is_post', 'true')
 
   const result = await installPnpm(inputs)

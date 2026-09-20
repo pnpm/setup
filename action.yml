@@ -123,14 +123,17 @@ inputs:
     default: 'true'
   registry-url:
     description: |
-      Base URL of a private npm registry to authenticate against before
-      installing, e.g. `https://myorg.jfrog.io/artifactory/api/npm/npm-local/`.
-      Requires `registry-token` to also be set.
+      HTTPS URL of a private npm registry to authenticate against during
+      the automatic install. HTTP is supported only for loopback registries.
+      Requires `registry-token` and pnpm 11.6.0 or newer. The project's registry
+      and scope routing must already select this URL. Ignored with `install: false`.
     required: false
   registry-token:
     description: |
       Auth token for the private registry specified in `registry-url`.
-      Pass this via a GitHub secret — it will not appear in logs.
+      Pass this via a GitHub secret; the action masks it in logs.
+      Used only by the automatic install and its subprocesses, without
+      changing persistent configuration or authenticating later steps.
       Requires `registry-url` to also be set.
     required: false
   token:

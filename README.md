@@ -31,6 +31,8 @@ Only one version of each runtime can be installed globally. If a runtime name is
 | `package-json-file` | **Deprecated** — use `working-directory`. Still honoured on its own; the directory containing the file becomes the working directory. |
 | `install` | Run `pnpm install` after setup. Default: `true`. Set to `false` for jobs that only need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration). |
 | `require-lockfile` | Fail unless a `pnpm-lock.yaml` already describes the install; runs `pnpm install --frozen-lockfile`. Default: `false`. |
+| `registry-url` | HTTPS URL of a private registry to authenticate against during the automatic install. Requires `registry-token` and pnpm 11.6.0 or newer. Project registry routing must already select this URL. |
+| `registry-token` | Token for `registry-url`, passed through a GitHub secret. Used only by the automatic install and its subprocesses; no persistent credential configuration is written. |
 | `token` | No longer used. pnpm is fetched from the npm registry and verified against npm's signature, so the action makes no GitHub API request. Kept so workflows that pass it keep working. |
 
 ## Outputs
@@ -264,6 +266,35 @@ simply publishes a fresher entry.
 Each save creates a new cache entry, even when the lockfile is unchanged.
 Large matrix workflows therefore use more cache storage and can evict older
 entries sooner.
+
+### Install from a private registry
+
+Keep registry routing in the project's `.npmrc`, for example:
+
+```ini
+@myorg:registry=https://npm.pkg.github.com/
+```
+
+Then supply credentials to the automatic install:
+
+```yaml
+- uses: pnpm/setup@v2
+  with:
+    registry-url: https://npm.pkg.github.com/
+    registry-token: ${{ secrets.PACKAGES_TOKEN }}
+```
+
+Both inputs must be supplied together. Registry URLs must use HTTPS, except
+for local HTTP registries at `localhost`, `127.0.0.1`, or `[::1]`. Credentials,
+query parameters, fragments, and equals signs are not accepted in the URL.
+
+Authentication requires pnpm 11.6.0 or newer. These inputs do not change the
+project's default or scoped registry routing. The token is masked in logs
+and provided only to the automatic install process and its subprocesses.
+Existing user and project configuration files are left unchanged.
+
+With `install: false`, no registry authentication is configured. Later
+install or publish steps must provide their own credentials.
 
 ### Skip `pnpm install`
 

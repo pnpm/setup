@@ -1,20 +1,23 @@
-import { describe, it } from 'node:test'
+import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildRegistryAuthArgs } from './registry.ts'
+import { registryInstallEnv } from './registry.ts'
 
-describe('buildRegistryAuthArgs', () => {
-  it('uses protocol-relative key form with trailing slash', () => {
-    const args = buildRegistryAuthArgs('https://example.jfrog.io/npm/', 'mytoken')
-    assert.deepEqual(args, ['config', 'set', '//example.jfrog.io/npm/:_authToken', 'mytoken'])
+for (const [url, key] of [
+  ['https://example.jfrog.io/npm/', 'pnpm_config_//example.jfrog.io/npm/:_authToken'],
+  ['https://example.jfrog.io/npm', 'pnpm_config_//example.jfrog.io/npm/:_authToken'],
+  ['https://registry.example.com/', 'pnpm_config_//registry.example.com/:_authToken'],
+  ['https://registry.example.com:8443/MyRegistry/', 'pnpm_config_//registry.example.com:8443/MyRegistry/:_authToken'],
+]) {
+  test(`scopes authentication to ${url}`, () => {
+    const environment = { PATH: '/bin', 'INPUT_REGISTRY-TOKEN': 'secret', unrelated: 'keep' }
+    assert.deepEqual(registryInstallEnv({ registryUrl: url, registryToken: 'secret' }, environment), {
+      PATH: '/bin', unrelated: 'keep', [key]: 'secret',
+    })
+    assert.equal(environment['INPUT_REGISTRY-TOKEN'], 'secret')
+    assert.equal(environment[key], undefined)
   })
+}
 
-  it('normalises missing trailing slash on the path', () => {
-    const args = buildRegistryAuthArgs('https://example.jfrog.io/npm', 'mytoken')
-    assert.deepEqual(args, ['config', 'set', '//example.jfrog.io/npm/:_authToken', 'mytoken'])
-  })
-
-  it('works with a bare hostname registry', () => {
-    const args = buildRegistryAuthArgs('https://registry.example.com/', 'tok')
-    assert.deepEqual(args, ['config', 'set', '//registry.example.com/:_authToken', 'tok'])
-  })
+test('removes the raw input even when no registry is configured', () => {
+  assert.deepEqual(registryInstallEnv(undefined, { 'INPUT_REGISTRY-TOKEN': 'secret', 'input_registry-token': 'secret', PATH: '/bin' }), { PATH: '/bin' })
 })

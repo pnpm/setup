@@ -2,8 +2,9 @@ import { info, setFailed, setSecret, startGroup, endGroup } from '@actions/core'
 import { spawnSync } from 'child_process'
 import { existsSync } from 'fs'
 import path from 'path'
+import { valid, gte } from 'semver'
 import { Inputs } from '../inputs'
-import { buildRegistryAuthArgs } from './registry'
+import { registryInstallEnv } from './registry'
 
 export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs.runtime)) {
   const args = ['install']
@@ -51,16 +52,14 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
 
   if (inputs.registry) {
     setSecret(inputs.registry.registryToken)
-    const configArgs = buildRegistryAuthArgs(inputs.registry.registryUrl, inputs.registry.registryToken)
-    startGroup('Configuring private registry auth...')
-    const configResult = spawnSync('pnpm', configArgs, { stdio: 'inherit' })
-    endGroup()
-    if (configResult.error) {
-      setFailed(configResult.error)
-      return
-    }
-    if (configResult.status !== 0) {
-      setFailed(`pnpm config set for private registry exited with status ${configResult.status}`)
+    const versionResult = spawnSync('pnpm', ['--version'], {
+      cwd: workingDirectory,
+      env: registryInstallEnv(undefined, process.env),
+      encoding: 'utf8',
+    })
+    const version = versionResult.stdout?.trim()
+    if (versionResult.status !== 0 || !version || !valid(version) || !gte(version, '11.6.0')) {
+      setFailed('Private registry authentication requires pnpm 11.6.0 or newer.')
       return
     }
   }
@@ -72,7 +71,7 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
   const { error, status, signal } = spawnSync('pnpm', args, {
     stdio: 'inherit',
     cwd: workingDirectory,
-    shell: true,
+    env: registryInstallEnv(inputs.registry, process.env),
   })
   endGroup()
 

@@ -733,6 +733,23 @@ jobs:
           fi
         shell: bash
 
+  registry-auth:
+    name: 'Private registry auth (${{ matrix.os }} / pnpm ${{ matrix.version }})'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        version: ['11.6.0', '12.5.1']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./
+        with:
+          version: ${{ matrix.version }}
+          runtime: node@24.19.0
+      - name: Install a package from an authenticated local registry
+        run: node test/registry-auth.mjs
+
   install-false:
     # `install: false` skips the auto-install step even though a manifest is
     # present.
