@@ -11,6 +11,10 @@ pnpm ships a self-contained release binary — the action downloads it for the r
 
 If your `package.json` declares `devEngines.runtime`, the action picks up every runtime and version from there automatically — no inputs required.
 
+When the manifest does not declare Node.js, the action also checks `.node-version`,
+`.nvmrc`, and `.tool-versions` in the project directory. Set `node-version-file: false`
+to disable this detection.
+
 Only one version of each runtime can be installed globally. If a runtime name is declared more than once, the action emits a GitHub warning annotation and installs the last declared version while retaining the position of its first declaration.
 
 ## Inputs
@@ -19,10 +23,11 @@ Only one version of each runtime can be installed globally. If a runtime name is
 |------|-------------|
 | `version` | Version of pnpm to install: an exact version, a semver range (`^12.0.0`), or a dist-tag (`next-12`). Must resolve to v11 or newer. Optional when `packageManager` or `devEngines.packageManager` is set in `package.json`. |
 | `dest` | Where to store pnpm files. Defaults to `~/setup-pnpm`. |
-| `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime` in `package.json`, then to `lts` (for `node`) / `latest`. If the input itself is omitted, the action installs every entry in `devEngines.runtime` from `package.json`. |
+| `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime`, then to `lts` (for `node`) / `latest`. Node.js also supports version files with the precedence described below. If the input itself is omitted, installs every entry in `devEngines.runtime` and adds Node.js when a version file supplies it. |
+| `node-version-file` | Optional Node.js version file path, relative to `working-directory`. By default, checks `.node-version`, `.nvmrc`, then `.tool-versions` when the manifest does not declare Node.js. Set to `false` to disable file detection. An explicit path overrides the manifest; an explicit version in `runtime` overrides both. |
 | `cache` | Cache the pnpm store directory and restore it before installing the runtimes. Default: `false`. |
 | `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Relative to `GITHUB_WORKSPACE`. Defaults to `pnpm-lock.yaml` inside `working-directory`. |
-| `working-directory` | Directory the project lives in, relative to `GITHUB_WORKSPACE`. Config is read from the manifest there, `pnpm install` runs there, and `cache-dependency-path` resolves relative to it. Default: `.`. |
+| `working-directory` | Directory the project lives in, relative to `GITHUB_WORKSPACE`. Config is read from the manifest there, `pnpm install` runs there, and `node-version-file` plus the default `cache-dependency-path` resolve relative to it. Default: `.`. |
 | `package-json-file` | **Deprecated** — use `working-directory`. Still honoured on its own; the directory containing the file becomes the working directory. |
 | `install` | Run `pnpm install` after setup. Default: `true`. Set to `false` for jobs that only need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration). |
 | `require-lockfile` | Fail unless a `pnpm-lock.yaml` already describes the install; runs `pnpm install --frozen-lockfile`. Default: `false`. |
@@ -66,6 +71,57 @@ jobs:
 
 `pnpm install` runs automatically because the workspace has a `package.json`.
 
+### Install Node.js from a version file
+
+With a `.node-version`, `.nvmrc`, or Node.js entry in `.tool-versions` in the
+project directory, no runtime input is needed:
+
+```yaml
+- uses: pnpm/setup@v2
+```
+
+Node.js version selection uses this precedence:
+
+1. An explicit version in `runtime`, such as `node@22`.
+2. An explicit `node-version-file` path.
+3. A Node.js declaration in `devEngines.runtime`.
+4. Automatic detection of `.node-version`, `.nvmrc`, then `.tool-versions` in `working-directory`.
+
+The first detected file wins. Detection does not search parent directories.
+A `.tool-versions` file without a `node` or `nodejs` entry is ignored during
+detection. Invalid detected versions fail setup instead of silently selecting
+another file. If no version source exists, Node.js is not installed unless
+`runtime: node` is set, which defaults to `lts`.
+
+To use a different file:
+
+```yaml
+- uses: pnpm/setup@v2
+  with:
+    node-version-file: config/node-version
+```
+
+To disable version-file detection:
+
+```yaml
+- uses: pnpm/setup@v2
+  with:
+    node-version-file: false
+```
+
+This opt-out leaves explicit `runtime` and `devEngines.runtime` installation enabled.
+
+Plain version files must contain one selector. `.nvmrc` comments are accepted,
+and common nvm selectors are translated to pnpm's equivalents: `node` and
+`stable` become `latest`, `lts/*` becomes `lts`, and `lts/<name>` becomes the
+LTS name. In `.tool-versions`, the first version after `node` or `nodejs` is
+used. Values that pnpm cannot install, such as `system`, `path:...`, and
+`ref:...`, fail the setup step.
+
+When no `runtime` input is present, a file can add Node.js alongside Bun or
+Deno declarations in `devEngines.runtime`. An explicit Bun or Deno `runtime`
+ignores Node.js version files.
+
 ### Matrix: test on multiple Node versions
 
 ```yaml
@@ -108,7 +164,8 @@ When the project is not at the repository root — a site in `docs/`, an app in
 ```
 
 `pnpm install` then runs in `docs`, `packageManager` and `devEngines` are read
-from `docs/package.json`, and the cache key comes from `docs/pnpm-lock.yaml`.
+from `docs/package.json`, `node-version-file` resolves from `docs`, and the
+cache key comes from `docs/pnpm-lock.yaml`.
 Set `cache-dependency-path` yourself and it stays relative to the repository
 root, as it has always been — only its default follows the working directory.
 Without this the install runs at the repository root,

@@ -27,16 +27,34 @@ inputs:
 
       When the version is omitted, the action falls back to the version
       declared in `devEngines.runtime` for the same name, or to `lts` (for
-      `node`) / `latest` for others.
+      `node`) / `latest` for others. For Node.js, an explicit version file
+      overrides the manifest; automatically detected files are used after
+      the manifest and before the `lts` fallback.
 
       If this input is omitted entirely, the action installs every runtime in
       `devEngines.runtime` from the project's package.json. In case of duplicates,
-      the last declared version wins. If the field is missing, no runtime is installed.
+      the last declared version wins. Node.js is also installed when a
+      version file supplies its version, unless an explicit Bun or Deno
+      runtime was selected.
 
       Whenever a runtime is installed, the action exports
       `PNPM_CONFIG_GLOBAL_SHIMS` with that runtime's context-aware shim
       disabled, so later steps run exactly this version instead of one a
       project pins. Set the variable in the workflow to override.
+    required: false
+  node-version-file:
+    description: |
+      File containing the Node.js version to install, relative to
+      `working-directory`. When omitted, automatically checks `.node-version`,
+      `.nvmrc`, then `.tool-versions` if no Node.js version is declared in
+      `devEngines.runtime`. Set to `false` to disable version-file detection.
+      An explicit file path takes precedence over `devEngines.runtime`.
+
+      When `runtime` is omitted, this installs Node.js alongside any non-Node
+      runtimes declared in `devEngines.runtime`. A version included directly
+      in `runtime` takes precedence, and an explicit Bun or Deno runtime
+      ignores version files. `.tool-versions` uses the first version in its
+      `node` or `nodejs` entry; automatic detection ignores it without that entry.
     required: false
   cache:
     description: |
@@ -57,8 +75,8 @@ inputs:
       Directory the project lives in, relative to the repository root
       (GITHUB_WORKSPACE). The action reads `packageManager` and
       `devEngines` from the manifest there, runs `pnpm install` there, and
-      resolves `cache-dependency-path` relative to it. Defaults to the
-      repository root.
+      resolves `node-version-file` and the default `cache-dependency-path`
+      relative to it. Defaults to the repository root.
 
       pnpm finds the workspace root itself by walking up, so a project
       inside a pnpm workspace does not need this — point it at a project

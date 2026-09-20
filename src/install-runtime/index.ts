@@ -5,6 +5,7 @@ import path from 'path'
 import util from 'util'
 import { parse as parseYaml } from 'yaml'
 import { Inputs, RuntimeName } from '../inputs'
+import { readNodeVersionFile } from './node-version-file'
 
 const SUPPORTED_RUNTIMES: ReadonlySet<RuntimeName> = new Set(['node', 'bun', 'deno'])
 
@@ -24,16 +25,32 @@ export interface RuntimeRequest {
 }
 
 export function resolveRuntimeRequests(inputs: Inputs): RuntimeRequest[] {
-  // Explicit `runtime` input always wins. `runtime.version` falls back to
-  // devEngines.runtime if not provided — useful for matrix workflows that
-  // pick the runtime but keep the version pinned in the manifest.
   if (inputs.runtime) {
     const { name } = inputs.runtime
-    const version = inputs.runtime.version ?? readDevEngineVersion(inputs, name) ?? defaultVersionFor(name)
+    if (inputs.nodeVersionFile && (name !== 'node' || inputs.runtime.version)) {
+      warning(
+        name === 'node'
+          ? '`node-version-file` is ignored because `runtime` already includes a Node.js version.'
+          : `\`node-version-file\` is ignored because \`runtime\` explicitly selects ${name}.`,
+      )
+    }
+    const version = inputs.runtime.version
+      ?? (name === 'node' && inputs.nodeVersionFile ? readNodeVersionFile(inputs) : undefined)
+      ?? readDevEngineVersion(inputs, name)
+      ?? (name === 'node' ? readNodeVersionFile(inputs) : undefined)
+      ?? defaultVersionFor(name)
     return [{ name, version }]
   }
 
-  return readDevEngineRuntimes(inputs)
+  const runtimes = readDevEngineRuntimes(inputs)
+  if (!inputs.nodeVersionFile && runtimes.some(runtime => runtime.name === 'node')) return runtimes
+  const nodeVersion = readNodeVersionFile(inputs)
+  if (!nodeVersion) return runtimes
+
+  return [
+    { name: 'node', version: nodeVersion },
+    ...runtimes.filter(runtime => runtime.name !== 'node'),
+  ]
 }
 
 export async function installRuntime(
@@ -123,7 +140,7 @@ export function keepInstalledRuntimesAuthoritative(runtimes: readonly InstalledR
 }
 
 export function logSkippedRuntime() {
-  info('No runtime requested (no `runtime` input and no `devEngines.runtime` in package.json). Skipping runtime install.')
+  info('No runtime requested or Node.js version file detected. Skipping runtime install.')
 }
 
 function defaultVersionFor(name: RuntimeName): string {
