@@ -36,12 +36,13 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
   }
 
   const workingDirectory = path.resolve(GITHUB_WORKSPACE, inputs.workingDirectory)
+  const pnpmBin = path.join(inputs.dest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
 
   // Answer this before running anything: a missing lockfile is the whole
   // reason `require-lockfile` exists, and pnpm's own error for it arrives
   // after an install that was never going to succeed.
   if (inputs.requireLockfile) {
-    const lockfileDirectory = lockfileDir(workingDirectory)
+    const lockfileDirectory = lockfileDir(workingDirectory, pnpmBin)
     if (!existsSync(path.join(lockfileDirectory, 'pnpm-lock.yaml'))) {
       const searched = path.relative(GITHUB_WORKSPACE, lockfileDirectory) || '.'
       setFailed(
@@ -54,7 +55,6 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
     }
   }
 
-  const pnpmBin = path.join(inputs.dest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
   startGroup(`Running ${command}...`)
   const { error, status, signal } = spawnSync(pnpmBin, args, {
     stdio: 'inherit',

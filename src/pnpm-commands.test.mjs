@@ -49,6 +49,14 @@ const recorder = `
   }, 25)
 `
 writeFileSync(path.join(project, 'install'), recorder)
+writeFileSync(path.join(project, 'root'), `
+  if (process.env.PNPM_TEST_WORKSPACE_ROOT) {
+    console.log(require('node:path').join(process.env.PNPM_TEST_WORKSPACE_ROOT, 'node_modules'))
+  } else {
+    process.exitCode = 1
+  }
+`)
+writeFileSync(path.join(project, 'config'), `console.log(process.env.PNPM_TEST_SHARED_LOCKFILE || 'true')`)
 const shimScript = path.join(dest, 'record.cjs')
 writeFileSync(shimScript, recorder)
 const quoteShell = value => `'${value.replaceAll("'", "'\\''")}'`
@@ -80,11 +88,15 @@ beforeEach(t => {
     INPUT_RUNTIME: '',
     PNPM_TEST_RECORD: record,
     PNPM_TEST_EXIT_CODE: '0',
+    PNPM_TEST_WORKSPACE_ROOT: '',
+    PNPM_TEST_SHARED_LOCKFILE: 'true',
   })
   // Simulate the PATH prepared by setup, with self-update's shim first.
   const pathKey = Object.keys(process.env).find(key => key.toUpperCase() === 'PATH') ?? 'PATH'
   process.env[pathKey] = [path.join(dest, 'bin'), dest, process.env[pathKey]].join(path.delimiter)
   rmSync(record, { force: true })
+  rmSync(path.join(root, 'pnpm-lock.yaml'), { force: true })
+  writeFileSync(path.join(project, 'pnpm-lock.yaml'), '')
 })
 
 test('install uses the native binary with a relative dest and a separate project directory', () => {
@@ -95,6 +107,36 @@ test('install uses the native binary with a relative dest and a separate project
   assert.deepEqual(actual.args, ['--frozen-lockfile', '--no-runtime'])
   assert.equal(actual.cwd, project)
   assert.equal(path.dirname(actual.executable), dest)
+})
+
+test('a standalone project rejects an unrelated parent lockfile before invoking install', () => {
+  rmSync(path.join(project, 'pnpm-lock.yaml'))
+  writeFileSync(path.join(root, 'pnpm-lock.yaml'), '')
+  runPnpmInstall(getInputs())
+  assert.equal(process.exitCode, 1)
+  assert.throws(() => readFileSync(record), { code: 'ENOENT' })
+})
+
+test('a shared workspace rejects a stale member lockfile when its root lockfile is missing', () => {
+  process.env.PNPM_TEST_WORKSPACE_ROOT = root
+  runPnpmInstall(getInputs())
+  assert.equal(process.exitCode, 1)
+  assert.throws(() => readFileSync(record), { code: 'ENOENT' })
+})
+
+test('a workspace member installs using only the root lockfile', () => {
+  process.env.PNPM_TEST_WORKSPACE_ROOT = root
+  rmSync(path.join(project, 'pnpm-lock.yaml'))
+  writeFileSync(path.join(root, 'pnpm-lock.yaml'), '')
+  runPnpmInstall(getInputs())
+  assert.deepEqual(JSON.parse(readFileSync(record, 'utf8')).args, ['--frozen-lockfile'])
+})
+
+test('a workspace with per-project lockfiles installs using the member lockfile', () => {
+  process.env.PNPM_TEST_WORKSPACE_ROOT = root
+  process.env.PNPM_TEST_SHARED_LOCKFILE = 'false'
+  runPnpmInstall(getInputs())
+  assert.deepEqual(JSON.parse(readFileSync(record, 'utf8')).args, ['--frozen-lockfile'])
 })
 
 test('pruning awaits the self-updated shim ahead of the original executable on PATH', async () => {
