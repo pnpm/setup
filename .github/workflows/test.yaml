@@ -12,20 +12,24 @@ permissions:
 
 jobs:
   pnpm-commands:
-    name: 'pnpm command execution (${{ matrix.os }})'
+    name: 'pnpm command execution (${{ matrix.os }} / pnpm ${{ matrix.version }})'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        version: ['11.22.0', '12.5.1']
     steps:
       - uses: actions/checkout@v7
-      - uses: ./
+      - id: pnpm
+        uses: ./
         with:
-          version: '12.0.0'
+          version: ${{ matrix.version }}
           runtime: node@24
       - name: Test command execution and reject deprecation warnings
-        run: node --throw-deprecation --test src/pnpm-commands.test.mjs
+        env:
+          PNPM_TEST_BIN: ${{ steps.pnpm.outputs.bin-dest }}/pnpm${{ runner.os == 'Windows' && '.exe' || '' }}
+        run: node --throw-deprecation --test src/pnpm-commands.test.mjs src/pnpm-install/lockfile.test.mjs
 
   smoke:
     # Direct binary download + pnpm on PATH across OSes and architectures.
@@ -1065,5 +1069,123 @@ jobs:
           set -e
           if [ ! -f pnpm-lock.yaml ]; then
             echo "Expected a plain install to write a lockfile"; exit 1
+          fi
+        shell: bash
+
+
+  require-lockfile-standalone-project:
+    # A nested project pnpm installs on its own: `working-directory` has a
+    # manifest of its own and no workspace above it, so the lockfile at the
+    # checkout root is not the one pnpm installs from. `require-lockfile` has
+    # to say that before the install rather than let pnpm's own
+    # ERR_PNPM_NO_LOCKFILE report it afterwards.
+    name: 'require-lockfile (standalone project / ${{ matrix.os }})'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up a checkout-root lockfile and a nested project without one
+        # This repository's own pnpm-workspace.yaml has to go: with it in
+        # place the nested directory is a workspace member on the pnpm pinned
+        # below, which is a different case from the one under test.
+        run: |
+          set -e
+          rm -f pnpm-lock.yaml pnpm-workspace.yaml
+          cat > package.json <<'JSON'
+          {
+            "packageManager": "pnpm@12.0.0",
+            "dependencies": {
+              "is-odd": "3.0.1"
+            }
+          }
+          JSON
+          mkdir -p nested
+          cat > nested/package.json <<'JSON'
+          {
+            "dependencies": {
+              "is-even": "1.0.0"
+            }
+          }
+          JSON
+        shell: bash
+
+      - name: Put pnpm on PATH without installing
+        uses: ./
+        with:
+          version: '12.0.0'
+          install: false
+
+      - name: Write the lockfile at the checkout root only
+        run: pnpm install --lockfile-only
+        shell: bash
+
+      - id: standalone
+        continue-on-error: true
+        uses: ./
+        with:
+          version: '12.0.0'
+          working-directory: nested
+          require-lockfile: true
+
+      - name: 'Test: the lockfile above the project did not satisfy the check'
+        env:
+          OUTCOME: ${{ steps.standalone.outcome }}
+        run: |
+          set -e
+          echo "outcome: ${OUTCOME}"
+          if [ "${OUTCOME}" != "failure" ]; then
+            echo "Expected require-lockfile to fail for a project whose own lockfile is missing"; exit 1
+          fi
+          if [ -d nested/node_modules ]; then
+            echo "Expected the step to fail before pnpm installed anything"; exit 1
+          fi
+        shell: bash
+
+      - name: 'Test: a lockfile of its own satisfies it'
+        run: pnpm --dir nested install --lockfile-only
+        shell: bash
+
+      - uses: ./
+        with:
+          version: '12.0.0'
+          working-directory: nested
+          require-lockfile: true
+
+      - name: 'Test: the nested project installed from its own lockfile'
+        run: |
+          set -e
+          if [ ! -d nested/node_modules/is-even ]; then
+            echo "Expected the nested project to install is-even"; exit 1
+          fi
+        shell: bash
+
+      - name: Make the nested project a member of a workspace instead
+        # The other branch: the lockfile a member installs from is the
+        # workspace root's, so its own is neither needed nor consulted.
+        run: |
+          set -e
+          rm -rf nested/node_modules nested/pnpm-lock.yaml
+          printf "packages:\n  - 'nested'\n" > pnpm-workspace.yaml
+          pnpm install --lockfile-only
+          if [ -f nested/pnpm-lock.yaml ]; then
+            echo "Expected the workspace to keep one lockfile, at its root"; exit 1
+          fi
+        shell: bash
+
+      - uses: ./
+        with:
+          version: '12.0.0'
+          working-directory: nested
+          require-lockfile: true
+
+      - name: 'Test: the member installed from the workspace root lockfile'
+        run: |
+          set -e
+          if [ ! -d nested/node_modules/is-even ]; then
+            echo "Expected the member to install is-even"; exit 1
           fi
         shell: bash
