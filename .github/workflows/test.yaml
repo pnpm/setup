@@ -667,6 +667,18 @@ jobs:
             file: .nvmrc
             version: 22.22.0
             runtime: node
+          - os: ubuntu-latest
+            format: explicit
+            file: custom-node-version
+            version: 22.22.0
+            runtime: ''
+            configured-file: custom-node-version
+          - os: ubuntu-latest
+            format: disabled
+            file: .node-version
+            version: invalid-version-that-must-not-be-read
+            runtime: ''
+            configured-file: 'false'
     steps:
       - uses: actions/checkout@v7
 
@@ -691,16 +703,25 @@ jobs:
           version: '12.0.0'
           working-directory: project
           runtime: ${{ matrix.runtime }}
-          node-version-file: ${{ matrix.file }}
+          node-version-file: ${{ matrix.configured-file }}
           install: false
 
       - name: 'Test: version file selected Node.js'
         env:
+          FORMAT: ${{ matrix.format }}
           EXPECTED: v${{ matrix.version }}
           OUTPUT_NAME: ${{ steps.pnpm.outputs.runtime-name }}
           OUTPUT_VERSION: ${{ steps.pnpm.outputs.runtime-version }}
+          OUTPUT_RUNTIMES: ${{ steps.pnpm.outputs.runtimes }}
         run: |
           set -e
+          if [ "${FORMAT}" = "disabled" ]; then
+            if [ -n "${OUTPUT_NAME}" ] || [ -n "${OUTPUT_VERSION}" ] || [ "${OUTPUT_RUNTIMES}" != '[]' ]; then
+              echo "Expected no runtime installation with detection disabled"
+              exit 1
+            fi
+            exit 0
+          fi
           actual="$(node --version)"
           if [ "${actual}" != "${EXPECTED}" ]; then
             echo "Expected ${EXPECTED}, got ${actual}"

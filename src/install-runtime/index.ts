@@ -25,8 +25,6 @@ export interface RuntimeRequest {
 }
 
 export function resolveRuntimeRequests(inputs: Inputs): RuntimeRequest[] {
-  // Explicit `runtime` input always wins. `runtime.version` falls back to
-  // node-version-file for Node, then devEngines.runtime if not provided.
   if (inputs.runtime) {
     const { name } = inputs.runtime
     if (inputs.nodeVersionFile && (name !== 'node' || inputs.runtime.version)) {
@@ -37,13 +35,15 @@ export function resolveRuntimeRequests(inputs: Inputs): RuntimeRequest[] {
       )
     }
     const version = inputs.runtime.version
-      ?? (name === 'node' ? readNodeVersionFile(inputs) : undefined)
+      ?? (name === 'node' && inputs.nodeVersionFile ? readNodeVersionFile(inputs) : undefined)
       ?? readDevEngineVersion(inputs, name)
+      ?? (name === 'node' ? readNodeVersionFile(inputs) : undefined)
       ?? defaultVersionFor(name)
     return [{ name, version }]
   }
 
   const runtimes = readDevEngineRuntimes(inputs)
+  if (!inputs.nodeVersionFile && runtimes.some(runtime => runtime.name === 'node')) return runtimes
   const nodeVersion = readNodeVersionFile(inputs)
   if (!nodeVersion) return runtimes
 
@@ -140,7 +140,7 @@ export function keepInstalledRuntimesAuthoritative(runtimes: readonly InstalledR
 }
 
 export function logSkippedRuntime() {
-  info('No runtime requested (no `runtime`, `node-version-file`, or `devEngines.runtime`). Skipping runtime install.')
+  info('No runtime requested or Node.js version file detected. Skipping runtime install.')
 }
 
 function defaultVersionFor(name: RuntimeName): string {

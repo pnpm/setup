@@ -61,6 +61,43 @@ test('a missing node-version-file fails with its resolved path', t => {
   )
 })
 
+test('discovery checks files in priority order inside working-directory', t => {
+  const workspace = createWorkspace(t)
+  mkdirSync(path.join(workspace, 'web'))
+  writeFileSync(path.join(workspace, '.node-version'), '20')
+  const options = inputs({ workingDirectory: 'web' })
+  assert.equal(readNodeVersionFile(options), undefined)
+
+  writeFileSync(path.join(workspace, 'web', '.tool-versions'), 'nodejs 22')
+  assert.equal(readNodeVersionFile(options), '22')
+  writeFileSync(path.join(workspace, 'web', '.nvmrc'), '24')
+  assert.equal(readNodeVersionFile(options), '24')
+  writeFileSync(path.join(workspace, 'web', '.node-version'), '26')
+  assert.equal(readNodeVersionFile(options), '26')
+})
+
+test('discovery ignores unrelated tool versions but an explicit file must declare Node', t => {
+  const workspace = createWorkspace(t)
+  writeFileSync(path.join(workspace, '.tool-versions'), 'ruby 3.4.5')
+  assert.equal(readNodeVersionFile(inputs()), undefined)
+  assert.throws(() => readNodeVersionFile(inputs({ nodeVersionFile: '.tool-versions' })), /does not declare a Node/)
+})
+
+test('an invalid discovered file fails instead of falling through to another file', t => {
+  const workspace = createWorkspace(t)
+  writeFileSync(path.join(workspace, '.node-version'), '')
+  writeFileSync(path.join(workspace, '.nvmrc'), '24')
+  assert.throws(() => readNodeVersionFile(inputs()), /must contain exactly one/)
+  assert.equal(readNodeVersionFile(inputs({ nodeVersionFile: false })), undefined)
+})
+
+test('an explicit path overrides automatic file selection', t => {
+  const workspace = createWorkspace(t)
+  writeFileSync(path.join(workspace, '.node-version'), '22')
+  writeFileSync(path.join(workspace, 'custom-version'), '24')
+  assert.equal(readNodeVersionFile(inputs({ nodeVersionFile: 'custom-version' })), '24')
+})
+
 function createWorkspace(t) {
   const workspace = mkdtempSync(path.join(tmpdir(), 'pnpm-setup-node-version-'))
   const previousWorkspace = process.env.GITHUB_WORKSPACE

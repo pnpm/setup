@@ -3,33 +3,42 @@ import path from 'path'
 import type { Inputs } from '../inputs'
 
 const TOOL_VERSION_NAMES = new Set(['node', 'nodejs'])
+const NODE_VERSION_FILES = ['.node-version', '.nvmrc', '.tool-versions']
 
 export function readNodeVersionFile(inputs: Inputs): string | undefined {
-  if (!inputs.nodeVersionFile) return undefined
+  if (inputs.nodeVersionFile === false) return undefined
 
   const { GITHUB_WORKSPACE } = process.env
   if (!GITHUB_WORKSPACE) {
+    if (!inputs.nodeVersionFile) return undefined
     throw new Error('GITHUB_WORKSPACE is not set; unable to resolve `node-version-file`.')
   }
 
-  const filePath = path.resolve(GITHUB_WORKSPACE, inputs.workingDirectory, inputs.nodeVersionFile)
-  let contents: string
-  try {
-    contents = readFileSync(filePath, 'utf8')
-  } catch (error: unknown) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-      throw new Error(`The specified Node version file does not exist: ${filePath}`)
+  const candidates = inputs.nodeVersionFile ? [inputs.nodeVersionFile] : NODE_VERSION_FILES
+  for (const candidate of candidates) {
+    const filePath = path.resolve(GITHUB_WORKSPACE, inputs.workingDirectory, candidate)
+    let contents: string
+    try {
+      contents = readFileSync(filePath, 'utf8')
+    } catch (error: unknown) {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        if (!inputs.nodeVersionFile) continue
+        throw new Error(`The specified Node version file does not exist: ${filePath}`)
+      }
+      throw error
     }
-    throw error
-  }
 
-  return parseNodeVersionFile(contents, path.basename(filePath))
+    const fileName = path.basename(filePath)
+    if (!inputs.nodeVersionFile && fileName === '.tool-versions' && !findToolVersion(cleanLines(contents))) continue
+    return parseNodeVersionFile(contents, fileName)
+  }
+  return undefined
 }
 
 export function parseNodeVersionFile(contents: string, fileName = 'Node version file'): string {
   const lines = cleanLines(contents)
   if (fileName === '.tool-versions') {
-    const declaration = lines.find(line => TOOL_VERSION_NAMES.has(line.split(/\s+/, 1)[0]))
+    const declaration = findToolVersion(lines)
     if (!declaration) {
       throw new Error(`${fileName} does not declare a Node.js version with \`node\` or \`nodejs\`.`)
     }
@@ -44,6 +53,10 @@ export function parseNodeVersionFile(contents: string, fileName = 'Node version 
     throw new Error(`${fileName} must contain exactly one Node.js version selector.`)
   }
   return normalizeNodeVersion(versions[0], fileName)
+}
+
+function findToolVersion(lines: string[]): string | undefined {
+  return lines.find(line => TOOL_VERSION_NAMES.has(line.split(/\s+/, 1)[0]))
 }
 
 function cleanLines(contents: string): string[] {
