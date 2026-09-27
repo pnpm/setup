@@ -80,6 +80,7 @@ beforeEach(t => {
     GITHUB_WORKSPACE: root,
     INPUT_DEST: path.relative(process.cwd(), dest),
     INPUT_CACHE: 'true',
+    'INPUT_SAVE-CACHE': 'true',
     INPUT_INSTALL: 'true',
     'INPUT_REQUIRE-LOCKFILE': 'true',
     'INPUT_WORKING-DIRECTORY': 'project',

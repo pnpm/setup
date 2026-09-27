@@ -3,7 +3,7 @@ import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { beforeEach, test } from 'node:test'
 import { build } from 'esbuild'
-import { getCacheKeyPrefix } from './keys.ts'
+import { getCacheKeyPrefix, getSaveCacheKey } from './keys.ts'
 
 const mocks = {
   '@actions/cache': `
@@ -19,18 +19,31 @@ const mocks = {
     export const setOutput = (key, value) => outputs.set(key, value)
     export const debug = () => {}
     export const info = () => {}
+    export const setFailed = () => {}
   `,
   '@actions/exec': String.raw`export const getExecOutput = async () => ({ stdout: '/pnpm-store\n' })`,
   '@actions/glob': `export const hashFiles = async () => 'lockfile-hash'`,
   '../lockfile-verification-cache': `export const restoreVerificationCache = async () => {}`,
+  '../pnpm-store-prune': `
+    import { mock } from 'node:test'
+    export const pruneStore = mock.fn(async () => {})
+    export default pruneStore
+  `,
+  '../store-fingerprint': `
+    import { mock } from 'node:test'
+    export const fingerprintStore = mock.fn(async () => 'restored-store')
+  `,
 }
 const bundle = await build({
   stdin: {
     contents: `
-      export { runRestoreCache, finalizeCache } from './run.ts'
+      export { runRestoreCache, finalizeCache, fingerprintRestoredStore } from './run.ts'
       export { runSaveCache } from '../cache-save/run.ts'
+      export { saveCache } from '../cache-save/index.ts'
       export * as cache from '@actions/cache'
       export * as core from '@actions/core'
+      export * as prune from '../pnpm-store-prune'
+      export * as fingerprint from '../store-fingerprint'
     `,
     resolveDir: fileURLToPath(new URL('.', import.meta.url)),
   },
@@ -48,11 +61,11 @@ const bundle = await build({
     },
   }],
 })
-const { runRestoreCache, finalizeCache, runSaveCache, cache, core } = await import(
+const { runRestoreCache, finalizeCache, fingerprintRestoredStore, runSaveCache, saveCache, cache, core, prune, fingerprint } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
 )
 
-const inputs = { cache: true, cacheDependencyPath: 'pnpm-lock.yaml' }
+const inputs = { cache: true, saveCache: true, cacheDependencyPath: 'pnpm-lock.yaml' }
 const runtimes = [{ name: 'node', version: '24.19.0' }]
 const keyPrefix = getCacheKeyPrefix(process.env.RUNNER_OS, os.arch(), runtimes)
 const lockfileKeyPrefix = `${keyPrefix}lockfile-hash-`
@@ -63,6 +76,9 @@ beforeEach(() => {
   cache.restoreCache.mock.resetCalls()
   cache.restoreCache.mock.mockImplementation(async () => undefined)
   cache.saveCache.mock.resetCalls()
+  prune.pruneStore.mock.resetCalls()
+  fingerprint.fingerprintStore.mock.resetCalls()
+  fingerprint.fingerprintStore.mock.mockImplementation(async () => 'restored-store')
 })
 
 test('restore asks for the current lockfile before the broader runtime fallback', async () => {
@@ -83,7 +99,7 @@ for (const [label, restoredKey, expectedHit] of [
     finalizeCache(restored, runtimes)
     assert.equal(core.outputs.get('cache-hit'), expectedHit)
 
-    await runSaveCache()
+    await runSaveCache(inputs)
     const primaryKey = core.state.get('cache_primary_key')
     assert.ok(primaryKey.startsWith(lockfileKeyPrefix))
     assert.notEqual(primaryKey, restoredKey)
@@ -93,7 +109,53 @@ for (const [label, restoredKey, expectedHit] of [
 
 test('a failure before finalization does not save the restored store', async () => {
   await runRestoreCache(inputs, runtimes)
-  await runSaveCache()
+  await runSaveCache(inputs)
+  assert.equal(cache.saveCache.mock.callCount(), 0)
+})
+
+const sameRuntimeKey = getSaveCacheKey(lockfileKeyPrefix, runtimes, 'previous-invocation')
+
+async function restoreBeforeInstall(installedRuntimes = runtimes) {
+  const restored = await runRestoreCache(inputs, runtimes)
+  finalizeCache(restored, installedRuntimes)
+  await fingerprintRestoredStore(restored, installedRuntimes)
+}
+
+test('an unchanged store restored for the same lockfile and runtimes is not saved again', async () => {
+  cache.restoreCache.mock.mockImplementation(async () => sameRuntimeKey)
+  await restoreBeforeInstall()
+  await runSaveCache(inputs)
+
+  assert.equal(prune.pruneStore.mock.callCount(), 0)
+  assert.equal(cache.saveCache.mock.callCount(), 0)
+})
+
+test('a store the job changed is saved', async () => {
+  cache.restoreCache.mock.mockImplementation(async () => sameRuntimeKey)
+  await restoreBeforeInstall()
+  fingerprint.fingerprintStore.mock.mockImplementation(async () => 'changed-store')
+  await runSaveCache(inputs)
+
+  assert.equal(prune.pruneStore.mock.callCount(), 1)
+  assert.equal(cache.saveCache.mock.callCount(), 1)
+})
+
+test('an unchanged store is saved when the installed runtime version differs', async () => {
+  cache.restoreCache.mock.mockImplementation(async () => sameRuntimeKey)
+  await restoreBeforeInstall([{ name: 'node', version: '24.20.0' }])
+  await runSaveCache(inputs)
+
+  assert.equal(cache.saveCache.mock.callCount(), 1)
+})
+
+test('save-cache false restores the store without saving it', async () => {
+  const restoreOnly = { ...inputs, saveCache: false }
+  cache.restoreCache.mock.mockImplementation(async () => sameRuntimeKey)
+  finalizeCache(await runRestoreCache(restoreOnly, runtimes), runtimes)
+  await saveCache(restoreOnly)
+
+  assert.equal(cache.restoreCache.mock.callCount(), 1)
+  assert.equal(prune.pruneStore.mock.callCount(), 0)
   assert.equal(cache.saveCache.mock.callCount(), 0)
 })
 
@@ -111,7 +173,7 @@ test('equivalent invocations in one workflow attempt publish distinct save keys'
   for (let invocation = 0; invocation < 2; invocation++) {
     const restored = await runRestoreCache(inputs, runtimes)
     finalizeCache(restored, runtimes)
-    await runSaveCache()
+    await runSaveCache(inputs)
   }
   const keys = cache.saveCache.mock.calls.map(call => call.arguments[1])
   assert.equal(keys.length, 2)

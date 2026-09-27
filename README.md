@@ -26,6 +26,7 @@ Only one version of each runtime can be installed globally. If a runtime name is
 | `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime`, then to `lts` (for `node`) / `latest`. Node.js also supports version files with the precedence described below. If the input itself is omitted, installs every entry in `devEngines.runtime` and adds Node.js when a version file supplies it. |
 | `node-version-file` | Optional Node.js version file path, relative to `working-directory`. By default, checks `.node-version`, `.nvmrc`, then `.tool-versions` when the manifest does not declare Node.js. Set to `false` to disable file detection. An explicit path overrides the manifest; an explicit version in `runtime` overrides both. |
 | `cache` | Cache the pnpm store directory and restore it before installing the runtimes. Default: `false`. |
+| `save-cache` | Save the pnpm store at the end of the job when `cache` is `true`. Set to `false` to only restore it. Default: `true`. |
 | `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Relative to `GITHUB_WORKSPACE`. Defaults to `pnpm-lock.yaml` inside `working-directory`. |
 | `working-directory` | Directory the project lives in, relative to `GITHUB_WORKSPACE`. Config is read from the manifest there, `pnpm install` runs there, and `node-version-file` plus the default `cache-dependency-path` resolve relative to it. Default: `.`. |
 | `package-json-file` | **Deprecated** — use `working-directory`. Still honoured on its own; the directory containing the file becomes the working directory. |
@@ -191,6 +192,17 @@ runtime selectors and the versions actually installed. Reordering
 `devEngines.runtime` does not change the key — the same set of runtimes
 produces the same store.
 
+To restore the store without saving it, set `save-cache: false`. This is
+useful for jobs that should not write to the cache, such as pull requests or
+all but one job in a matrix. The lockfile verification cache is still saved.
+
+```yaml
+- uses: pnpm/setup@v3
+  with:
+    cache: true
+    save-cache: ${{ github.ref == 'refs/heads/main' }}
+```
+
 ### Lockfile verification cache
 
 pnpm v11 and newer check every lockfile entry before installing it — that each
@@ -267,9 +279,11 @@ cancelled or fails mid-install can never pin a partial
 store under a key later runs are stuck matching — the next successful run
 simply publishes a fresher entry.
 
-Each save creates a new cache entry, even when the lockfile is unchanged.
-Large matrix workflows therefore use more cache storage and can evict older
-entries sooner.
+If the store was restored from an entry for the same lockfile and runtime
+versions, and the job did not change it, the save is skipped because it would
+only duplicate that entry. So a matrix with a warm cache saves nothing. A job
+that adds to the store, for example after restoring an incomplete entry,
+still saves it.
 
 ### Private registries
 

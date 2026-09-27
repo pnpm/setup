@@ -2,7 +2,7 @@ import { isFeatureAvailable } from '@actions/cache'
 import { endGroup, startGroup, warning } from '@actions/core'
 import { Inputs } from '../inputs'
 import { RuntimeRequest } from '../install-runtime'
-import { finalizeCache, RestoredCache, runRestoreCache } from './run'
+import { finalizeCache, fingerprintRestoredStore, RestoredCache, runRestoreCache } from './run'
 
 export async function restoreCache(
   inputs: Inputs,
@@ -24,5 +24,5 @@ export async function restoreCache(
   return restoredCache
 }
 
-export { finalizeCache }
+export { finalizeCache, fingerprintRestoredStore }
 export default restoreCache

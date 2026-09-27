@@ -9,6 +9,7 @@ exec env \
   INPUT_DEST='~/pnpm.temp' \
   INPUT_RUNTIME='node@lts' \
   INPUT_CACHE=false \
+  'INPUT_SAVE-CACHE=true' \
   'INPUT_CACHE-DEPENDENCY-PATH=pnpm-lock.yaml' \
   'INPUT_PACKAGE-JSON-FILE=package.json' \
   INPUT_INSTALL=true \

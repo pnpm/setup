@@ -3,10 +3,10 @@ import { Inputs } from '../inputs'
 import { runSaveCache } from './run'
 
 export async function saveCache(inputs: Inputs) {
-  if (!inputs.cache) return
+  if (!inputs.cache || !inputs.saveCache) return
 
   try {
-    await runSaveCache()
+    await runSaveCache(inputs)
   } catch (error) {
     setFailed((error as Error).message)
   }

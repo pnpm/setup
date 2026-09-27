@@ -15,8 +15,15 @@ export function getSaveCacheKey(
   resolvedRuntimes: readonly RuntimeRequest[],
   invocationId: string,
 ): string {
+  return `${getSaveCacheKeyPrefix(lockfileKeyPrefix, resolvedRuntimes)}${invocationId}`
+}
+
+export function getSaveCacheKeyPrefix(
+  lockfileKeyPrefix: string,
+  resolvedRuntimes: readonly RuntimeRequest[],
+): string {
   const runtimeVersionKey = resolvedRuntimes.length > 0 ? `${hashRuntimes(resolvedRuntimes)}-` : ''
-  return `${lockfileKeyPrefix}${runtimeVersionKey}${invocationId}`
+  return `${lockfileKeyPrefix}${runtimeVersionKey}`
 }
 
 export function getRestoreKeys(lockfileKeyPrefix: string, keyPrefix: string): string[] {

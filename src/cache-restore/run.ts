@@ -7,12 +7,14 @@ import os from 'os'
 import { Inputs } from '../inputs'
 import { RuntimeRequest } from '../install-runtime'
 import { restoreVerificationCache } from '../lockfile-verification-cache'
+import { fingerprintStore } from '../store-fingerprint'
 import { removeWindowsExtendedPathPrefix } from '../windows-path'
-import { getCacheKeyPrefix, getRestoreKeys, getSaveCacheKey, isLockfileExactHit } from './keys'
+import { getCacheKeyPrefix, getRestoreKeys, getSaveCacheKey, getSaveCacheKeyPrefix, isLockfileExactHit } from './keys'
 
 export interface RestoredCache {
   readonly lockfileKeyPrefix: string
   readonly restoredKey: string | undefined
+  readonly cachePath: string
 }
 
 export async function runRestoreCache(
@@ -55,11 +57,11 @@ async function runRestoreStoreCache(
 
   if (!restoredKey) {
     info(`Cache is not found`)
-    return { lockfileKeyPrefix, restoredKey: undefined }
+    return { lockfileKeyPrefix, restoredKey: undefined, cachePath }
   }
 
   info(`Cache restored from key: ${restoredKey}`)
-  return { lockfileKeyPrefix, restoredKey }
+  return { lockfileKeyPrefix, restoredKey, cachePath }
 }
 
 export function finalizeCache(cache: RestoredCache, resolvedRuntimes: readonly RuntimeRequest[]) {
@@ -71,6 +73,18 @@ export function finalizeCache(cache: RestoredCache, resolvedRuntimes: readonly R
   saveState('cache_primary_key', primaryKey)
 
   setOutput('cache-hit', isLockfileExactHit(cache.restoredKey, cache.lockfileKeyPrefix))
+}
+
+/** Must run before the install. */
+export async function fingerprintRestoredStore(
+  cache: RestoredCache,
+  resolvedRuntimes: readonly RuntimeRequest[],
+) {
+  const saveKeyPrefix = getSaveCacheKeyPrefix(cache.lockfileKeyPrefix, resolvedRuntimes)
+  if (!cache.restoredKey?.startsWith(saveKeyPrefix)) return
+
+  const fingerprint = await fingerprintStore(cache.cachePath)
+  if (fingerprint) saveState('cache_store_fingerprint', fingerprint)
 }
 
 async function getCacheDirectory() {

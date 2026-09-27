@@ -16,6 +16,7 @@ export interface Inputs {
   readonly version?: string
   readonly dest: string
   readonly cache: boolean
+  readonly saveCache: boolean
   readonly cacheDependencyPath: string
   /** Where the project lives, relative to GITHUB_WORKSPACE. */
   readonly workingDirectory: string
@@ -129,6 +130,7 @@ export const getInputs = (): Inputs => ({
   version: getInput('version'),
   dest: path.resolve(expandTilde(getInput('dest', options))),
   cache: getBooleanInput('cache'),
+  saveCache: getBooleanInput('save-cache'),
   ...resolveProjectPaths(),
   runtime: parseRuntime(),
   nodeVersionFile: parseNodeVersionFileInput(),

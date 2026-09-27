@@ -64,6 +64,14 @@ inputs:
       the README.
     required: false
     default: 'false'
+  save-cache:
+    description: |
+      Whether to save the pnpm store at the end of the job when `cache` is
+      `true`. Set to `false` to only restore it, for example in jobs that
+      should not write to the cache. The lockfile verification cache is
+      saved either way.
+    required: false
+    default: 'true'
   cache-dependency-path:
     description: |
       File path to the pnpm lockfile, whose contents hash is used as a cache
