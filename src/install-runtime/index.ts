@@ -213,6 +213,7 @@ function runPnpmForOutput(binDest: string, args: string[]): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const cp = spawn(pnpmBin, args, {
       stdio: ['ignore', 'pipe', 'inherit'],
+      timeout: 60_000,
     })
     let stdout = ''
     cp.stdout.setEncoding('utf8')
@@ -220,11 +221,11 @@ function runPnpmForOutput(binDest: string, args: string[]): Promise<string> {
       stdout += chunk
     })
     cp.on('error', reject)
-    cp.on('close', code => {
+    cp.on('close', (code, signal) => {
       if (code === 0) {
         resolve(stdout)
       } else {
-        reject(new Error(`pnpm ${args.join(' ')} exited with code ${code}`))
+        reject(new Error(`pnpm ${args.join(' ')} exited with ${signal ?? `code ${code}`}`))
       }
     })
   })

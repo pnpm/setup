@@ -1,6 +1,7 @@
 import { setFailed, saveState, getState } from '@actions/core'
 import restoreCache, { finalizeCache } from './cache-restore'
 import saveCache from './cache-save'
+import { flushAndExit } from './flush-and-exit'
 import getInputs, { Inputs } from './inputs'
 import installPnpm from './install-pnpm'
 import {
@@ -90,7 +91,11 @@ async function runPost() {
   await saveCache(inputs)
 }
 
-main().catch(error => {
-  console.error(error)
-  setFailed(error)
-})
+// A failed cache download leaves its remaining block requests open, and they
+// keep node alive after `main` settles.
+main()
+  .catch(error => {
+    console.error(error)
+    setFailed(error)
+  })
+  .finally(flushAndExit)
