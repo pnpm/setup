@@ -5,7 +5,11 @@ import path from 'path'
 import { Inputs } from '../inputs'
 import { lockfileDir } from './lockfile'
 
-export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs.runtime)) {
+/** True only when this action actually completed an install successfully. */
+export function runPnpmInstall(
+  inputs: Inputs,
+  runtimeInstalled = Boolean(inputs.runtime),
+): boolean {
   const args = ['install']
   if (inputs.requireLockfile) {
     args.push('--frozen-lockfile')
@@ -27,12 +31,12 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
   const { GITHUB_WORKSPACE } = process.env
   if (!GITHUB_WORKSPACE) {
     info(`GITHUB_WORKSPACE is not set; skipping \`${command}\`.`)
-    return
+    return false
   }
   const manifestPath = path.resolve(GITHUB_WORKSPACE, inputs.packageJsonFile)
   if (!existsSync(manifestPath)) {
     info(`No ${inputs.packageJsonFile} found in workspace; skipping \`${command}\`.`)
-    return
+    return false
   }
 
   const workingDirectory = path.resolve(GITHUB_WORKSPACE, inputs.workingDirectory)
@@ -47,11 +51,11 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
       const searched = path.relative(GITHUB_WORKSPACE, lockfileDirectory) || '.'
       setFailed(
         '`require-lockfile` is set but no pnpm-lock.yaml was found in ' +
-        `${searched}, which is where an install in ${inputs.workingDirectory} ` +
-        'reads one. Commit the lockfile, or unset `require-lockfile` to let ' +
-        'pnpm resolve and write one.',
+          `${searched}, which is where an install in ${inputs.workingDirectory} ` +
+          'reads one. Commit the lockfile, or unset `require-lockfile` to let ' +
+          'pnpm resolve and write one.',
       )
-      return
+      return false
     }
   }
 
@@ -64,17 +68,19 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
 
   if (error) {
     setFailed(error)
-    return
+    return false
   }
   // A process killed by a signal reports `status: null` with no `error`, so a
   // truthiness check on `status` alone would let that pass as a success.
   if (signal) {
     setFailed(`${command} was terminated by ${signal}`)
-    return
+    return false
   }
   if (status !== 0) {
     setFailed(`${command} exited with status ${status}`)
+    return false
   }
+  return true
 }
 
 export default runPnpmInstall

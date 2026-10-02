@@ -52,10 +52,10 @@ async function runMain() {
   // the version that actually landed, so read it back once and use it for
   // both. Fall back to the selector if the installed version cannot be read.
   const installedVersions = await getInstalledRuntimeVersions(
-    runtimes.map(runtime => runtime.name),
+    runtimes.map((runtime) => runtime.name),
     result.binDest,
   )
-  const installed = runtimes.map(runtime => ({
+  const installed = runtimes.map((runtime) => ({
     name: runtime.name,
     version: installedVersions.get(runtime.name) ?? runtime.version,
   }))
@@ -71,26 +71,26 @@ async function runMain() {
   snapshotVerificationLog()
 
   if (inputs.install) {
-    pnpmInstall(inputs, runtimes.length > 0)
     // Uploaded here rather than in the post step so that whatever the job runs
     // next cannot alter what later jobs restore. When `install` is false the
     // log is not complete yet — the job installs in a step of its own, and the
     // post step is the first moment it is known to be done.
-    await saveVerificationCache(1)
+    if (pnpmInstall(inputs, runtimes.length > 0)) await saveVerificationCache(1)
   }
 }
 
 async function runPost() {
   const inputs = JSON.parse(getState('inputs')) as Inputs
-  // Covers a job that installs in a later step of its own; when this action
-  // installed, the log was already saved then. Runs before the prune because
-  // pnpm versions before pnpm/pnpm#13893 delete the log during one.
-  await saveVerificationCache()
+  // Only a later-step install owns post publication. An action-owned install
+  // already had its one bounded attempt, including a miss, collision, failure
+  // or rejected log. Never reopen that window after other job steps ran.
+  // Runs before pruning because older pnpm versions delete the log during one.
+  if (!inputs.install) await saveVerificationCache()
   await pruneStore(inputs)
   await saveCache(inputs)
 }
 
-main().catch(error => {
+main().catch((error) => {
   console.error(error)
   setFailed(error)
 })

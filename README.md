@@ -220,6 +220,11 @@ the upload: pnpm refuses to run them unless the repository allow-lists the
 package through `allowBuilds`, and a package on that list can already run code
 in the job.
 
+Only a successful action-owned install can publish that verdict. Its upload
+window ends there even if another job already reserved the key, the upload
+failed, or the log was rejected. The post step never retries that log after
+later job steps have run. Skipped and failed installs do not publish it.
+
 Before uploading, the action checks that the log grew the way an install grows
 it: every record that predated the install still there, and no more new records
 than installs it ran. A dependency's script that slips an extra record in is
