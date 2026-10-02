@@ -5,7 +5,6 @@ import path from 'path'
 import { Inputs } from '../inputs'
 import { lockfileDir } from './lockfile'
 
-/** True only when this action actually completed an install successfully. */
 export function runPnpmInstall(
   inputs: Inputs,
   runtimeInstalled = Boolean(inputs.runtime),

@@ -21,6 +21,9 @@ jobs:
           version: 11
           run_install: true
 
+      - name: Test install and cache ownership
+        run: pnpm test
+
       - name: Build dist/index.js
         run: pnpm run build
 
