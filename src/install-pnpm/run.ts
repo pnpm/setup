@@ -7,6 +7,8 @@ import util from 'util'
 import { parse as parseYaml } from 'yaml'
 import { Inputs } from '../inputs'
 import { downloadPnpm, resolvePnpm } from './download'
+import { readLockedPnpmVersion } from './locked-version'
+import { packageManagerLockfileDirectory, packageManagerManifest } from './project'
 
 export interface SelfInstallerResult {
   binDest: string
@@ -16,8 +18,20 @@ export interface SelfInstallerResult {
 export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerResult> {
   const { version, dest, packageJsonFile } = inputs
 
-  const spec = readTargetVersion({ version, packageJsonFile })
-  const resolved = await resolvePnpm(spec)
+  const checkout = process.env.GITHUB_WORKSPACE
+  const manifest = checkout
+    ? version
+      ? path.resolve(checkout, packageJsonFile)
+      : packageManagerManifest(path.resolve(checkout, packageJsonFile), checkout)
+    : undefined
+  const spec = readTargetVersion({ version, packageJsonFile: manifest ?? packageJsonFile })
+  const lockfileDirectory = !version && manifest && checkout
+    ? packageManagerLockfileDirectory(path.resolve(checkout, packageJsonFile), manifest)
+    : undefined
+  const lockedVersion = lockfileDirectory
+    ? readLockedPnpmVersion(lockfileDirectory, spec)
+    : undefined
+  const resolved = await resolvePnpm(lockedVersion ?? spec)
   info(`Downloading pnpm ${resolved.version} from the npm registry`)
 
   await rm(dest, { recursive: true, force: true })
@@ -114,7 +128,10 @@ Please specify it by one of the following ways:
 
 function readVersion(pnpmBin: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    const cp = spawn(pnpmBin, ['--version'], { stdio: ['ignore', 'pipe', 'inherit'] })
+    // Check the downloaded binary itself, not a version selected by the project.
+    const cp = spawn(pnpmBin, ['--config.pm-on-fail=ignore', '--version'], {
+      stdio: ['ignore', 'pipe', 'inherit'],
+    })
     let output = ''
     cp.stdout.on('data', (chunk) => { output += chunk })
     cp.on('error', reject)

@@ -17,7 +17,7 @@ export interface Inputs {
   readonly dest: string
   readonly cache: boolean
   readonly saveCache: boolean
-  readonly cacheDependencyPath: string
+  readonly cacheDependencyPath?: string
   /** Where the project lives, relative to GITHUB_WORKSPACE. */
   readonly workingDirectory: string
   /** The manifest to read config from, relative to GITHUB_WORKSPACE. */
@@ -66,7 +66,6 @@ const MANIFEST_NAMES = ['package.json', 'package.yaml'] as const
 function resolveProjectPaths(): {
   workingDirectory: string
   packageJsonFile: string
-  cacheDependencyPath: string
 } {
   const workingDirectoryInput = getInput('working-directory').trim()
   const packageJsonFileInput = getInput('package-json-file').trim()
@@ -82,28 +81,14 @@ function resolveProjectPaths(): {
   if (packageJsonFileInput) {
     const packageJsonFile = expandTilde(packageJsonFileInput)
     const workingDirectory = path.dirname(packageJsonFile)
-    return { workingDirectory, packageJsonFile, cacheDependencyPath: resolveCacheDependencyPath(workingDirectory) }
+    return { workingDirectory, packageJsonFile }
   }
 
   const workingDirectory = expandTilde(workingDirectoryInput || '.')
   return {
     workingDirectory,
     packageJsonFile: findManifest(workingDirectory),
-    cacheDependencyPath: resolveCacheDependencyPath(workingDirectory),
   }
-}
-
-/**
- * `cache-dependency-path` stays relative to the repository root, the way it
- * has always been documented — rewriting a value the workflow set would turn
- * an existing `web/pnpm-lock.yaml` into `web/web/pnpm-lock.yaml`. Only the
- * default follows the project, so a subdirectory finds its own lockfile
- * without the workflow having to name it twice.
- */
-function resolveCacheDependencyPath(workingDirectory: string): string {
-  const configured = getInput('cache-dependency-path').trim()
-  if (configured) return expandTilde(configured)
-  return path.join(workingDirectory, 'pnpm-lock.yaml')
 }
 
 /**
@@ -126,18 +111,22 @@ function isSupportedRuntime(name: string): name is RuntimeName {
   return (SUPPORTED_RUNTIMES as readonly string[]).includes(name)
 }
 
-export const getInputs = (): Inputs => ({
-  version: getInput('version'),
-  dest: path.resolve(expandTilde(getInput('dest', options))),
-  cache: getBooleanInput('cache'),
-  saveCache: getBooleanInput('save-cache'),
-  ...resolveProjectPaths(),
-  runtime: parseRuntime(),
-  nodeVersionFile: parseNodeVersionFileInput(),
-  install: getBooleanInput('install'),
-  requireLockfile: getBooleanInput('require-lockfile'),
-  token: getInput('token') || undefined,
-})
+export const getInputs = (): Inputs => {
+  const cacheDependencyPath = getInput('cache-dependency-path').trim()
+  return {
+    version: getInput('version'),
+    dest: path.resolve(expandTilde(getInput('dest', options))),
+    cache: getBooleanInput('cache'),
+    saveCache: getBooleanInput('save-cache'),
+    ...resolveProjectPaths(),
+    cacheDependencyPath: cacheDependencyPath ? expandTilde(cacheDependencyPath) : undefined,
+    runtime: parseRuntime(),
+    nodeVersionFile: parseNodeVersionFileInput(),
+    install: getBooleanInput('install'),
+    requireLockfile: getBooleanInput('require-lockfile'),
+    token: getInput('token') || undefined,
+  }
+}
 
 function parseNodeVersionFileInput(): string | false | undefined {
   const value = getInput('node-version-file').trim()

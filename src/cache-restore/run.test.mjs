@@ -22,8 +22,8 @@ const mocks = {
     export const setFailed = () => {}
   `,
   '@actions/exec': String.raw`export const getExecOutput = async () => ({ stdout: '/pnpm-store\n' })`,
-  '@actions/glob': `export const hashFiles = async () => 'lockfile-hash'`,
-  '../lockfile-verification-cache': `export const restoreVerificationCache = async () => {}`,
+  '@actions/glob': `import { mock } from 'node:test'; export const hashFiles = mock.fn(async () => 'lockfile-hash')`,
+  '../lockfile-verification-cache': `import { mock } from 'node:test'; export const restoreVerificationCache = mock.fn(async () => {})`,
   '../pnpm-store-prune': `
     import { mock } from 'node:test'
     export const pruneStore = mock.fn(async () => {})
@@ -44,6 +44,8 @@ const bundle = await build({
       export * as core from '@actions/core'
       export * as prune from '../pnpm-store-prune'
       export * as fingerprint from '../store-fingerprint'
+      export * as glob from '@actions/glob'
+      export * as verification from '../lockfile-verification-cache'
     `,
     resolveDir: fileURLToPath(new URL('.', import.meta.url)),
   },
@@ -61,7 +63,7 @@ const bundle = await build({
     },
   }],
 })
-const { runRestoreCache, finalizeCache, fingerprintRestoredStore, runSaveCache, saveCache, cache, core, prune, fingerprint } = await import(
+const { runRestoreCache, finalizeCache, fingerprintRestoredStore, runSaveCache, saveCache, cache, core, glob, verification, prune, fingerprint } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
 )
 
@@ -79,6 +81,15 @@ beforeEach(() => {
   prune.pruneStore.mock.resetCalls()
   fingerprint.fingerprintStore.mock.resetCalls()
   fingerprint.fingerprintStore.mock.mockImplementation(async () => 'restored-store')
+  glob.hashFiles.mock.resetCalls()
+  verification.restoreVerificationCache.mock.resetCalls()
+})
+
+test('verification caching remains enabled when store caching and installation are disabled', async () => {
+  await runRestoreCache({ ...inputs, cache: false, install: false }, runtimes)
+  assert.deepEqual(glob.hashFiles.mock.calls[0].arguments, ['pnpm-lock.yaml'])
+  assert.deepEqual(verification.restoreVerificationCache.mock.calls[0].arguments, ['lockfile-hash'])
+  assert.equal(cache.restoreCache.mock.callCount(), 0)
 })
 
 test('restore asks for the current lockfile before the broader runtime fallback', async () => {
