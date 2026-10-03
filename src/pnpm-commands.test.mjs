@@ -10,6 +10,7 @@ const { outputFiles } = await build({
   stdin: {
     contents: `
       export { getInputs } from './inputs/index.ts'
+      export { resolveCacheDependencyPath } from './cache-restore/run.ts'
       export { runPnpmInstall } from './pnpm-install/index.ts'
       export { pruneStore } from './pnpm-store-prune/index.ts'
     `,
@@ -24,7 +25,7 @@ const bundledModule = { exports: {} }
 new Function('require', 'module', 'exports', outputFiles[0].text)(
   createRequire(import.meta.url), bundledModule, bundledModule.exports,
 )
-const { getInputs, runPnpmInstall, pruneStore } = bundledModule.exports
+const { getInputs, runPnpmInstall, pruneStore, resolveCacheDependencyPath } = bundledModule.exports
 
 const root = mkdtempSync(path.join(process.cwd(), '.pnpm-commands-test-'))
 const dest = path.join(root, 'pnpm home & tools')
@@ -115,6 +116,44 @@ test('a standalone project rejects an unrelated parent lockfile before invoking 
   runPnpmInstall(getInputs())
   assert.equal(process.exitCode, 1)
   assert.throws(() => readFileSync(record), { code: 'ENOENT' })
+})
+
+test('default cache paths follow workspace membership while explicit paths take precedence', () => {
+  const workspaceFile = path.join(root, 'pnpm-workspace.yaml')
+  writeFileSync(workspaceFile, "packages: ['project']\n")
+  writeFileSync(path.join(root, 'package.json'), '{}')
+  try {
+    process.env.PNPM_TEST_WORKSPACE_ROOT = root
+    assert.equal(resolveCacheDependencyPath(getInputs()), 'pnpm-lock.yaml')
+    process.env.INPUT_CACHE = 'false'
+    process.env.INPUT_INSTALL = 'false'
+    assert.equal(resolveCacheDependencyPath(getInputs()), 'pnpm-lock.yaml')
+    writeFileSync(workspaceFile, "packages: ['project']\nsharedWorkspaceLockfile: false\n")
+    process.env.PNPM_TEST_SHARED_LOCKFILE = 'false'
+    assert.equal(resolveCacheDependencyPath(getInputs()), path.join('project', 'pnpm-lock.yaml'))
+    process.env.PNPM_TEST_WORKSPACE_ROOT = ''
+    assert.equal(resolveCacheDependencyPath(getInputs()), path.join('project', 'pnpm-lock.yaml'))
+    process.env['INPUT_CACHE-DEPENDENCY-PATH'] = 'custom/pnpm-lock.yaml'
+    assert.equal(resolveCacheDependencyPath(getInputs()), 'custom/pnpm-lock.yaml')
+  } finally {
+    rmSync(workspaceFile, { force: true })
+  }
+})
+
+test('cache-disabled binary setup does not parse workspace configuration', () => {
+  const workspaceFile = path.join(root, 'pnpm-workspace.yaml')
+  writeFileSync(workspaceFile, 'packages: [')
+  Object.assign(process.env, {
+    INPUT_CACHE: 'false',
+    INPUT_INSTALL: 'false',
+    INPUT_VERSION: '12.8.1',
+  })
+  try {
+    assert.equal(getInputs().cacheDependencyPath, undefined)
+    assert.equal(resolveCacheDependencyPath(getInputs()), path.join('project', 'pnpm-lock.yaml'))
+  } finally {
+    rmSync(workspaceFile, { force: true })
+  }
 })
 
 test('a shared workspace rejects a stale member lockfile when its root lockfile is missing', () => {

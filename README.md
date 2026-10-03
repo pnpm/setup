@@ -26,12 +26,26 @@ Only one version of each runtime can be installed globally. If a runtime name is
 | `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime`, then to `lts` (for `node`) / `latest`. Node.js also supports version files with the precedence described below. If the input itself is omitted, installs every entry in `devEngines.runtime` and adds Node.js when a version file supplies it. |
 | `node-version-file` | Optional Node.js version file path, relative to `working-directory`. By default, checks `.node-version`, `.nvmrc`, then `.tool-versions` when the manifest does not declare Node.js. Set to `false` to disable file detection. An explicit path overrides the manifest; an explicit version in `runtime` overrides both. |
 | `cache` | Cache the pnpm store directory and restore it before installing the runtimes. Default: `false`. |
-| `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Relative to `GITHUB_WORKSPACE`. Defaults to `pnpm-lock.yaml` inside `working-directory`. |
-| `working-directory` | Directory the project lives in, relative to `GITHUB_WORKSPACE`. Config is read from the manifest there, `pnpm install` runs there, and `node-version-file` plus the default `cache-dependency-path` resolve relative to it. Default: `.`. |
+| `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Relative to `GITHUB_WORKSPACE`. Defaults to the shared workspace lockfile for members, or `pnpm-lock.yaml` inside `working-directory` otherwise. |
+| `working-directory` | Directory the project lives in, relative to `GITHUB_WORKSPACE`. `pnpm install` runs there and `node-version-file` resolves relative to it. Package-manager selection and shared-lockfile caching follow the workspace root for members. Default: `.`. |
 | `package-json-file` | **Deprecated** — use `working-directory`. Still honoured on its own; the directory containing the file becomes the working directory. |
 | `install` | Run `pnpm install` after setup. Default: `true`. Set to `false` for jobs that only need pnpm itself (e.g. `pnpm audit`, lockfile-only regeneration). |
 | `require-lockfile` | Fail unless a `pnpm-lock.yaml` already describes the install; runs `pnpm install --frozen-lockfile`. Default: `false`. |
 | `token` | No longer used. pnpm is fetched from the npm registry and verified against npm's signature, so the action makes no GitHub API request. Kept so workflows that pass it keep working. |
+
+When `version` is omitted and the manifest specifies a range, setup checks the
+package-manager document in `pnpm-lock.yaml` beside the project manifest. If the
+locked pnpm version satisfies that range, setup installs it instead of resolving
+a newer release from npm. This follows pnpm's version-switching rules: the
+recorded specifier may differ, and prereleases are included when checking the
+range. For workspace members, setup finds the nearest `pnpm-workspace.yaml`
+within the checkout, checks its `packages` patterns and exclusions, and reads
+the root manifest and shared lockfile. With `sharedWorkspaceLockfile: false`,
+the member's lockfile supplies the locked version. Excluded projects keep their own manifest and
+lockfile. An explicit `version` input still takes precedence. Custom lockfile
+locations and workspace roots outside the checkout retain the existing
+version-selection behavior. Frozen installs still validate the lockfile
+against the manifest through pnpm.
 
 ## Outputs
 
@@ -167,7 +181,8 @@ When the project is not at the repository root — a site in `docs/`, an app in
 from `docs/package.json`, `node-version-file` resolves from `docs`, and the
 cache key comes from `docs/pnpm-lock.yaml`.
 Set `cache-dependency-path` yourself and it stays relative to the repository
-root, as it has always been — only its default follows the working directory.
+root, as it has always been — its default follows the project's shared
+workspace lockfile, or its own lockfile for standalone and per-project installs.
 Without this the install runs at the repository root,
 where pnpm finds no manifest, prints `Already up to date` and exits `0` having
 installed nothing — a green setup step followed by a confusing failure later.

@@ -4,9 +4,11 @@ import { getExecOutput } from '@actions/exec'
 import { hashFiles } from '@actions/glob'
 import { randomUUID } from 'crypto'
 import os from 'os'
+import path from 'path'
 import { Inputs } from '../inputs'
 import { RuntimeRequest } from '../install-runtime'
 import { restoreVerificationCache } from '../lockfile-verification-cache'
+import { lockfileDir } from '../pnpm-install/lockfile'
 import { removeWindowsExtendedPathPrefix } from '../windows-path'
 import { getCacheKeyPrefix, getRestoreKeys, getSaveCacheKey, isLockfileExactHit } from './keys'
 
@@ -19,7 +21,7 @@ export async function runRestoreCache(
   inputs: Inputs,
   runtimes: readonly RuntimeRequest[],
 ): Promise<RestoredCache | undefined> {
-  const fileHash = await hashFiles(inputs.cacheDependencyPath)
+  const fileHash = await hashFiles(resolveCacheDependencyPath(inputs))
   if (!fileHash) {
     // Both caches are keyed on the lockfile, so neither can be restored
     // without one. Only the store cache was asked for by name.
@@ -38,6 +40,18 @@ export async function runRestoreCache(
   if (!inputs.cache) return
 
   return runRestoreStoreCache(fileHash, runtimes)
+}
+
+/**
+ * Ask the installed pnpm which lockfile it uses, including workspace membership
+ * and per-project configuration. Explicit paths retain checkout-relative semantics.
+ */
+export function resolveCacheDependencyPath(inputs: Inputs): string {
+  if (inputs.cacheDependencyPath) return inputs.cacheDependencyPath
+  const checkout = process.env.GITHUB_WORKSPACE ?? process.cwd()
+  const project = path.resolve(checkout, inputs.workingDirectory)
+  const pnpmBin = path.join(inputs.dest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
+  return path.relative(checkout, path.join(lockfileDir(project, pnpmBin), 'pnpm-lock.yaml'))
 }
 
 async function runRestoreStoreCache(

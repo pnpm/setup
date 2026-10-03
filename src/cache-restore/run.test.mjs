@@ -21,8 +21,8 @@ const mocks = {
     export const info = () => {}
   `,
   '@actions/exec': String.raw`export const getExecOutput = async () => ({ stdout: '/pnpm-store\n' })`,
-  '@actions/glob': `export const hashFiles = async () => 'lockfile-hash'`,
-  '../lockfile-verification-cache': `export const restoreVerificationCache = async () => {}`,
+  '@actions/glob': `import { mock } from 'node:test'; export const hashFiles = mock.fn(async () => 'lockfile-hash')`,
+  '../lockfile-verification-cache': `import { mock } from 'node:test'; export const restoreVerificationCache = mock.fn(async () => {})`,
 }
 const bundle = await build({
   stdin: {
@@ -31,6 +31,8 @@ const bundle = await build({
       export { runSaveCache } from '../cache-save/run.ts'
       export * as cache from '@actions/cache'
       export * as core from '@actions/core'
+      export * as glob from '@actions/glob'
+      export * as verification from '../lockfile-verification-cache'
     `,
     resolveDir: fileURLToPath(new URL('.', import.meta.url)),
   },
@@ -48,7 +50,7 @@ const bundle = await build({
     },
   }],
 })
-const { runRestoreCache, finalizeCache, runSaveCache, cache, core } = await import(
+const { runRestoreCache, finalizeCache, runSaveCache, cache, core, glob, verification } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
 )
 
@@ -63,6 +65,15 @@ beforeEach(() => {
   cache.restoreCache.mock.resetCalls()
   cache.restoreCache.mock.mockImplementation(async () => undefined)
   cache.saveCache.mock.resetCalls()
+  glob.hashFiles.mock.resetCalls()
+  verification.restoreVerificationCache.mock.resetCalls()
+})
+
+test('verification caching remains enabled when store caching and installation are disabled', async () => {
+  await runRestoreCache({ ...inputs, cache: false, install: false }, runtimes)
+  assert.deepEqual(glob.hashFiles.mock.calls[0].arguments, ['pnpm-lock.yaml'])
+  assert.deepEqual(verification.restoreVerificationCache.mock.calls[0].arguments, ['lockfile-hash'])
+  assert.equal(cache.restoreCache.mock.callCount(), 0)
 })
 
 test('restore asks for the current lockfile before the broader runtime fallback', async () => {

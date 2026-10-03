@@ -68,15 +68,16 @@ inputs:
     description: |
       File path to the pnpm lockfile, whose contents hash is used as a cache
       key. Relative to the repository root (GITHUB_WORKSPACE). Defaults to
-      `pnpm-lock.yaml` inside `working-directory`.
+      the shared workspace lockfile for workspace members, or `pnpm-lock.yaml`
+      inside `working-directory` for standalone and per-project installs.
     required: false
   working-directory:
     description: |
       Directory the project lives in, relative to the repository root
-      (GITHUB_WORKSPACE). The action reads `packageManager` and
-      `devEngines` from the manifest there, runs `pnpm install` there, and
-      resolves `node-version-file` and the default `cache-dependency-path`
-      relative to it. Defaults to the repository root.
+      (GITHUB_WORKSPACE). The action runs `pnpm install` there and resolves
+      `node-version-file` relative to it. For workspace members, package-manager
+      selection and shared-lockfile caching follow the workspace root.
+      Defaults to the repository root.
 
       pnpm finds the workspace root itself by walking up, so a project
       inside a pnpm workspace does not need this — point it at a project
