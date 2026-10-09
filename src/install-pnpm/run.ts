@@ -16,7 +16,7 @@ export interface SelfInstallerResult {
 }
 
 export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerResult> {
-  const { version, dest, packageJsonFile } = inputs
+  const { version, dest, packageJsonFile, registry } = inputs
 
   const checkout = process.env.GITHUB_WORKSPACE
   const manifest = checkout
@@ -31,8 +31,8 @@ export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerRes
   const lockedVersion = lockfileDirectory
     ? readLockedPnpmVersion(lockfileDirectory, spec)
     : undefined
-  const resolved = await resolvePnpm(lockedVersion ?? spec)
-  info(`Downloading pnpm ${resolved.version} from the npm registry`)
+  const resolved = await resolvePnpm(lockedVersion ?? spec, registry)
+  info(`Downloading pnpm ${resolved.version} from ${resolved.registry}`)
 
   await rm(dest, { recursive: true, force: true })
   // Create dest/bin upfront: pnpm ≤ 12.0.0-alpha.17 refuses to run

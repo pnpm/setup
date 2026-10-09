@@ -2,6 +2,7 @@ import { getBooleanInput, getInput, InputOptions } from '@actions/core'
 import expandTilde from 'expand-tilde'
 import { existsSync } from 'fs'
 import path from 'path'
+import { resolveRegistry } from '../install-pnpm/registry'
 
 export type RuntimeName = 'node' | 'bun' | 'deno'
 
@@ -14,6 +15,8 @@ export interface RuntimeInput {
 
 export interface Inputs {
   readonly version?: string
+  /** Registry pnpm is resolved and downloaded from, ending in a slash. */
+  readonly registry: string
   readonly dest: string
   readonly cache: boolean
   readonly saveCache: boolean
@@ -115,6 +118,7 @@ export const getInputs = (): Inputs => {
   const cacheDependencyPath = getInput('cache-dependency-path').trim()
   return {
     version: getInput('version'),
+    registry: resolveRegistry(getInput('registry'), process.env),
     dest: path.resolve(expandTilde(getInput('dest', options))),
     cache: getBooleanInput('cache'),
     saveCache: getBooleanInput('save-cache'),

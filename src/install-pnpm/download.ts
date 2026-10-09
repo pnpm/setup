@@ -9,7 +9,6 @@ import { downloadPnpm as downloadVerifiedPnpm } from 'get-pnpm'
 // is the oldest major this action can install.
 const MIN_SUPPORTED_MAJOR = 11
 
-const REGISTRY = 'https://registry.npmjs.org'
 // Abbreviated packuments are much smaller than full ones and still carry the
 // per-version metadata needed to resolve a version spec.
 const ABBREVIATED_PACKUMENT = 'application/vnd.npm.install-v1+json'
@@ -22,7 +21,8 @@ interface AbbreviatedPackument {
 const http = new HttpClient('pnpm/setup', undefined, { allowRetries: true, maxRetries: 3 })
 
 /**
- * A resolved version, fetched from the npm registry.
+ * A resolved version, and the registry it was resolved against — the download
+ * comes from the same one.
  *
  * The registry packages hold the same executable as the GitHub release assets,
  * byte for byte, and npm signs a checksum for them with a key `get-pnpm` pins —
@@ -32,16 +32,21 @@ const http = new HttpClient('pnpm/setup', undefined, { allowRetries: true, maxRe
  */
 export interface ResolvedPnpm {
   readonly version: string
+  readonly registry: string
 }
 
-export async function resolvePnpm(spec: string): Promise<ResolvedPnpm> {
-  const version = await resolveVersion(spec)
+/**
+ * `registry` must end in a slash (see `resolveRegistry`). A mirror has to pass
+ * npm's metadata through unchanged: the signature check needs `dist.signatures`.
+ */
+export async function resolvePnpm(spec: string, registry: string): Promise<ResolvedPnpm> {
+  const version = await resolveVersion(spec, registry)
   if (semver.major(version) < MIN_SUPPORTED_MAJOR) {
     throw new Error(`The requested pnpm version "${spec}" resolved to ${version}, but this action only installs pnpm v${MIN_SUPPORTED_MAJOR} or newer.
 This action downloads pnpm's self-contained release binary and uses \`pnpm runtime\` to install a JavaScript runtime; both are available from v${MIN_SUPPORTED_MAJOR} onward.
 To install older pnpm, use the pnpm/action-setup action instead.`)
   }
-  return { version }
+  return { version, registry }
 }
 
 /**
@@ -54,7 +59,7 @@ To install older pnpm, use the pnpm/action-setup action instead.`)
  */
 export async function downloadPnpm(resolved: ResolvedPnpm, destDir: string): Promise<string> {
   await mkdir(destDir, { recursive: true })
-  await downloadVerifiedPnpm({ versionSpec: resolved.version, registry: REGISTRY, dest: destDir })
+  await downloadVerifiedPnpm({ versionSpec: resolved.version, registry: resolved.registry, dest: destDir })
   // Up to v11 get-pnpm writes a manifest so that `pnpm setup` installs the
   // wrapper's dependencies. This action never runs setup — it owns this
   // directory and puts it on PATH — so the manifest would just be a stray
@@ -80,7 +85,7 @@ export async function downloadPnpm(resolved: ResolvedPnpm, destDir: string): Pro
   return pnpmBin
 }
 
-async function resolveVersion(spec: string): Promise<string> {
+async function resolveVersion(spec: string, registry: string): Promise<string> {
   const exact = semver.valid(spec)
   if (exact) return exact
 
@@ -88,7 +93,7 @@ async function resolveVersion(spec: string): Promise<string> {
     // Resolve ranges against the `pnpm` packument, which lists every published
     // version. Prefer stable releases; fall back to prereleases so ranges like
     // `12` or `^12.0.0` resolve while v12 has only prerelease versions published.
-    const available = await fetchPnpmVersions()
+    const available = await fetchPnpmVersions(registry)
     const resolved = semver.maxSatisfying(available, spec)
       ?? semver.maxSatisfying(available, spec, { includePrerelease: true })
     if (!resolved) {
@@ -99,7 +104,7 @@ async function resolveVersion(spec: string): Promise<string> {
 
   // Anything else is treated as a dist-tag (e.g. `next-12`), read from the main
   // `pnpm` package.
-  const distTags = await fetchJson<Record<string, string>>(`${REGISTRY}/-/package/pnpm/dist-tags`)
+  const distTags = await fetchJson<Record<string, string>>(new URL('-/package/pnpm/dist-tags', registry).href)
   const version = distTags[spec]
   if (!version) {
     throw new Error(`"${spec}" is neither a valid pnpm version, a semver range, nor a known dist-tag of pnpm.`)
@@ -107,9 +112,9 @@ async function resolveVersion(spec: string): Promise<string> {
   return version
 }
 
-async function fetchPnpmVersions(): Promise<string[]> {
+async function fetchPnpmVersions(registry: string): Promise<string[]> {
   const packument = await fetchJson<AbbreviatedPackument>(
-    `${REGISTRY}/pnpm`,
+    new URL('pnpm', registry).href,
     { accept: ABBREVIATED_PACKUMENT },
   )
   return Object.keys(packument.versions)
