@@ -37,6 +37,15 @@ test('rejects credentials without echoing them', () => {
   )
 })
 
+test('rejects a query or fragment without echoing it', () => {
+  for (const registry of ['https://mirror.example.com/npm?token=s3cret', 'https://mirror.example.com/npm#s3cret']) {
+    assert.throws(
+      () => resolveRegistry(registry),
+      error => /must not contain a query string or fragment/.test(error.message) && !error.message.includes('s3cret'),
+    )
+  }
+})
+
 test('accepts plain http registries', () => {
   assert.equal(resolveRegistry('http://mirror.internal/npm'), 'http://mirror.internal/npm/')
 })

@@ -29,6 +29,12 @@ export function resolveRegistry(input: string): string {
   if (url.username || url.password) {
     throw new Error('The registry URL must not contain credentials. Registries that need authentication are not supported yet.')
   }
+  // Request paths are resolved against the registry as a base URL, which drops
+  // a query or fragment along with the last path segment. Not echoed: a query
+  // is a common place for a token.
+  if (url.search || url.hash) {
+    throw new Error('The registry URL must not contain a query string or fragment.')
+  }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new Error(`Invalid registry URL "${url.href}". Only http and https registries are supported.`)
   }
