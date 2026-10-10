@@ -2,27 +2,20 @@ import { warning } from '@actions/core'
 
 export const DEFAULT_REGISTRY = 'https://registry.npmjs.org/'
 
-// pnpm reads its own `pnpm_config_*` variables; `get-pnpm` and npm read the
-// `npm_config_*` ones. Honouring both lets a single job-level variable point
-// this action and the `pnpm install` it runs at the same mirror.
-const REGISTRY_ENV_VARS = [
-  'pnpm_config_registry',
-  'PNPM_CONFIG_REGISTRY',
-  'npm_config_registry',
-  'NPM_CONFIG_REGISTRY',
-] as const
-
 /**
  * The registry to resolve and download pnpm from: the `registry` input, else
- * the first registry variable set in `env`, else the npm registry.
+ * the npm registry.
+ *
+ * `pnpm_config_registry` and `npm_config_registry` are deliberately not read:
+ * workflows already point them at registries that need a token to read, which
+ * the download cannot send, and pnpm used to come from npm regardless.
  *
  * The result always ends in a slash. Mirrors are often served from a subpath
  * (`https://artifactory.example.com/api/npm/npm-remote`), and
  * `new URL('pnpm', base)` drops the last segment of a base without one.
  */
-export function resolveRegistry(input: string, env: NodeJS.ProcessEnv): string {
-  const fromEnv = REGISTRY_ENV_VARS.map(name => env[name]?.trim()).find(Boolean)
-  const configured = input.trim() || fromEnv || DEFAULT_REGISTRY
+export function resolveRegistry(input: string): string {
+  const configured = input.trim() || DEFAULT_REGISTRY
 
   let url: URL
   try {

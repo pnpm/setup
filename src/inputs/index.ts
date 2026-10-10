@@ -118,7 +118,7 @@ export const getInputs = (): Inputs => {
   const cacheDependencyPath = getInput('cache-dependency-path').trim()
   return {
     version: getInput('version'),
-    registry: resolveRegistry(getInput('registry'), process.env),
+    registry: resolveRegistry(getInput('registry')),
     dest: path.resolve(expandTilde(getInput('dest', options))),
     cache: getBooleanInput('cache'),
     saveCache: getBooleanInput('save-cache'),
