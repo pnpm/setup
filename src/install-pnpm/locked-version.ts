@@ -1,6 +1,7 @@
-import { readFileSync } from 'fs'
+import { closeSync, openSync, readSync } from 'fs'
 import path from 'path'
 import semver from 'semver'
+import { StringDecoder } from 'string_decoder'
 import { parseDocument } from 'yaml'
 
 /**
@@ -11,15 +12,14 @@ export function readLockedPnpmVersion(directory: string, spec: string): string |
   // Exact pins already identify the binary; tags need registry resolution.
   if (semver.valid(spec) || !semver.validRange(spec)) return undefined
 
-  let content: string
+  let envDocument: string | undefined
   try {
-    content = readFileSync(path.join(directory, 'pnpm-lock.yaml'), 'utf8')
+    envDocument = readEnvDocument(path.join(directory, 'pnpm-lock.yaml'))
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
     throw error
   }
 
-  const envDocument = extractEnvDocument(content)
   if (envDocument === undefined) return undefined
   const document = parseDocument(envDocument)
   if (document.errors.length) throw document.errors[0]
@@ -31,6 +31,38 @@ export function readLockedPnpmVersion(directory: string, spec: string): string |
     return locked.version
   }
   return undefined
+}
+
+function readEnvDocument(filename: string): string | undefined {
+  const fd = openSync(filename, 'r')
+  try {
+    const buffer = Buffer.allocUnsafe(64 * 1024)
+    const decoder = new StringDecoder('utf8')
+    const chunks: string[] = []
+    const separator = /\r?\n---\r?\n/g
+    let tail = ''
+    let checkedStart = false
+    while (true) {
+      const bytesRead = readSync(fd, buffer, 0, buffer.length, null)
+      if (bytesRead === 0) return extractEnvDocument(chunks.join('') + decoder.end())
+      const chunk = decoder.write(buffer.subarray(0, bytesRead))
+      chunks.push(chunk)
+      const content = tail + chunk
+      if (!checkedStart && content.length < 6) {
+        tail = content
+        continue
+      }
+      const start = checkedStart ? 0 : /^\uFEFF?---\r?\n/.exec(content)?.[0].length
+      if (start === undefined) return undefined
+      separator.lastIndex = start
+      if (separator.test(content)) return extractEnvDocument(chunks.join(''))
+      checkedStart = true
+      // Retain enough text for a CRLF separator split across reads.
+      tail = content.slice(Math.max(start, content.length - 6))
+    }
+  } finally {
+    closeSync(fd)
+  }
 }
 
 /**
