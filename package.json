@@ -7,18 +7,18 @@
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test src/cache-restore/*.test.mjs src/install-pnpm/*.test.mjs src/install-runtime/*.test.mjs src/pnpm-install/*.test.mjs src/store-fingerprint/*.test.mjs src/*.test.mjs"
   },
   "dependencies": {
-    "@actions/cache": "^6.2.0",
+    "@actions/cache": "^6.3.0",
     "@actions/core": "^3.0.1",
     "@actions/exec": "^3.0.0",
     "@actions/glob": "^0.7.0",
     "@actions/http-client": "^4.0.1",
     "@types/expand-tilde": "^2.0.2",
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.6.4",
     "@types/semver": "^7.8.0",
     "expand-tilde": "^2.0.2",
-    "get-pnpm": "^0.0.3",
+    "get-pnpm": "^0.0.5",
     "semver": "^7.8.5",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
