@@ -47,7 +47,8 @@ test('installer selects the lock, preserves explicit input, and isolates its san
   })
   process.env.GITHUB_WORKSPACE = root
   writeFileSync(path.join(root, 'package.json'), JSON.stringify({ devEngines: { packageManager: { name: 'pnpm', version: '>=12.0.0 <13.0.0' } } }))
-  writeFileSync(path.join(root, 'pnpm-lock.yaml'), `importers:
+  writeFileSync(path.join(root, 'pnpm-lock.yaml'), `---
+importers:
   .:
     packageManagerDependencies:
       pnpm:
@@ -67,14 +68,14 @@ importers: {}
     // An included member can omit its pin; an excluded project owns its pin.
     writeFileSync(path.join(directory, 'package.json'), JSON.stringify(name === 'app'
       ? {} : { devEngines: { packageManager: { name: 'pnpm', version: '12.8.2' } } }))
-    if (name === 'app') writeFileSync(path.join(directory, 'pnpm-lock.yaml'), 'importers: [')
+    if (name === 'app') writeFileSync(path.join(directory, 'pnpm-lock.yaml'), '---\nimporters: [\n')
   }
   await bundled.exports.runSelfInstaller({ ...inputs, packageJsonFile: 'packages/app/package.json' })
   assert.equal(globalThis.selectedSpec, '12.8.1')
   await bundled.exports.runSelfInstaller({ ...inputs, packageJsonFile: 'packages/excluded/package.json' })
   assert.equal(globalThis.selectedSpec, '12.8.2')
   writeFileSync(path.join(root, 'pnpm-workspace.yaml'), "packages: ['packages/*']\nsharedWorkspaceLockfile: false\n")
-  writeFileSync(path.join(root, 'packages/app/pnpm-lock.yaml'), 'importers:\n  .:\n    packageManagerDependencies:\n      pnpm:\n        version: 12.7.0\n')
+  writeFileSync(path.join(root, 'packages/app/pnpm-lock.yaml'), '---\nimporters:\n  .:\n    packageManagerDependencies:\n      pnpm:\n        version: 12.7.0\n')
   await bundled.exports.runSelfInstaller({ ...inputs, packageJsonFile: 'packages/app/package.json' })
   assert.equal(globalThis.selectedSpec, '12.7.0')
   rmSync(path.join(root, 'packages/app/pnpm-lock.yaml'))
@@ -87,7 +88,7 @@ importers: {}
   await bundled.exports.runSelfInstaller({ ...inputs, version: '12.8.2' })
   assert.equal(globalThis.selectedSpec, '12.8.2')
   // Exact manifest pins must not depend on a dependency lockfile being readable.
-  writeFileSync(path.join(root, 'pnpm-lock.yaml'), 'importers: [')
+  writeFileSync(path.join(root, 'pnpm-lock.yaml'), '---\nimporters: [\n')
   for (const manifest of [
     { packageManager: 'pnpm@12.8.1+sha512.example' },
     { devEngines: { packageManager: { name: 'pnpm', version: '12.8.1' } } },
@@ -100,4 +101,28 @@ importers: {}
   rmSync(path.join(root, 'pnpm-lock.yaml'))
   await bundled.exports.runSelfInstaller(inputs)
   assert.equal(globalThis.selectedSpec, '>=12.0.0 <13.0.0')
+})
+
+test('a member keeps its own pnpm declaration when the workspace root has none', async t => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'setup-installer-'))
+  const previous = process.env.GITHUB_WORKSPACE
+  t.after(() => {
+    rmSync(root, { recursive: true, force: true })
+    if (previous === undefined) delete process.env.GITHUB_WORKSPACE
+    else process.env.GITHUB_WORKSPACE = previous
+    delete globalThis.selectedSpec
+    delete globalThis.versionArgs
+  })
+  process.env.GITHUB_WORKSPACE = root
+  writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'root' }))
+  writeFileSync(path.join(root, 'pnpm-workspace.yaml'), "packages: ['packages/*']\n")
+  mkdirSync(path.join(root, 'packages/app'), { recursive: true })
+  writeFileSync(path.join(root, 'packages/app/package.json'), JSON.stringify({ packageManager: 'pnpm@12.8.2' }))
+  const inputs = { dest: path.join(root, 'tools'), packageJsonFile: 'packages/app/package.json' }
+  await bundled.exports.runSelfInstaller(inputs)
+  assert.equal(globalThis.selectedSpec, '12.8.2')
+
+  writeFileSync(path.join(root, 'package.json'), JSON.stringify({ packageManager: 'pnpm@12.8.1' }))
+  await bundled.exports.runSelfInstaller(inputs)
+  assert.equal(globalThis.selectedSpec, '12.8.1')
 })

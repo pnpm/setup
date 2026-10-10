@@ -41,7 +41,8 @@ a newer release from npm. This follows pnpm's version-switching rules: the
 recorded specifier may differ, and prereleases are included when checking the
 range. For workspace members, setup finds the nearest `pnpm-workspace.yaml`
 within the checkout, checks its `packages` patterns and exclusions, and reads
-the root manifest and shared lockfile. With `sharedWorkspaceLockfile: false`,
+the root manifest and shared lockfile. A member whose root declares no pnpm
+version keeps its own declaration. With `sharedWorkspaceLockfile: false`,
 the member's lockfile supplies the locked version. Excluded projects keep their own manifest and
 lockfile. An explicit `version` input still takes precedence. Custom lockfile
 locations and workspace roots outside the checkout retain the existing

@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs'
 import path from 'path'
 import semver from 'semver'
-import { parseAllDocuments } from 'yaml'
+import { parseDocument } from 'yaml'
 
 /**
  * Reuse a compatible package-manager pin from the lockfile's environment
@@ -19,9 +19,9 @@ export function readLockedPnpmVersion(directory: string, spec: string): string |
     throw error
   }
 
-  // pnpm 11+ stores package-manager dependencies in the first YAML document.
-  const document = parseAllDocuments(content)[0]
-  if (!document) return undefined
+  const envDocument = extractEnvDocument(content)
+  if (envDocument === undefined) return undefined
+  const document = parseDocument(envDocument)
   if (document.errors.length) throw document.errors[0]
   const locked = document.toJSON()?.importers?.['.']?.packageManagerDependencies?.pnpm
   // Match pnpm's version switching: keep a satisfying lock even after the
@@ -31,4 +31,16 @@ export function readLockedPnpmVersion(directory: string, spec: string): string |
     return locked.version
   }
   return undefined
+}
+
+/**
+ * pnpm 11+ records package-manager dependencies in a document that leads the
+ * lockfile. Slicing it out the way pnpm's `extractEnvDocument` does avoids
+ * parsing the dependency document, which runs to megabytes in a monorepo.
+ */
+function extractEnvDocument(content: string): string | undefined {
+  content = content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
+  if (!content.startsWith('---\n')) return undefined
+  const end = content.indexOf('\n---\n', 4)
+  return end === -1 ? content.slice(4).replace(/\n---\n?$/, '') : content.slice(4, end)
 }

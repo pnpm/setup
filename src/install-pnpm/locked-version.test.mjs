@@ -60,8 +60,28 @@ test('falls back when no lockfile or package-manager document exists', () => {
   assert.equal(readLockedPnpmVersion(directory, '12'), undefined)
 })
 
-test('rejects a malformed lockfile rather than silently selecting latest', () => {
+test('rejects a malformed package-manager document rather than silently selecting latest', () => {
   const directory = fixture()
-  fs.writeFileSync(path.join(directory, 'pnpm-lock.yaml'), 'importers: [')
+  fs.writeFileSync(path.join(directory, 'pnpm-lock.yaml'), "---\nimporters: [\n---\nlockfileVersion: '9.0'\n")
   assert.throws(() => readLockedPnpmVersion(directory, '12'))
+})
+
+test('reads only the leading document, as pnpm does', () => {
+  const directory = fixture()
+  const lockfile = path.join(directory, 'pnpm-lock.yaml')
+  // The dependency document is never parsed, so it cannot fail the lookup.
+  fs.appendFileSync(lockfile, 'packages: [\n')
+  assert.equal(readLockedPnpmVersion(directory, '12'), '12.8.1')
+  fs.writeFileSync(lockfile, `\uFEFF${fs.readFileSync(lockfile, 'utf8').replace(/\n/g, '\r\n')}`)
+  assert.equal(readLockedPnpmVersion(directory, '12'), '12.8.1')
+  // Without the leading separator there is no package-manager document.
+  fs.writeFileSync(lockfile, fs.readFileSync(lockfile, 'utf8').replace(/^\uFEFF---\r\n/, ''))
+  assert.equal(readLockedPnpmVersion(directory, '12'), undefined)
+})
+
+test('reads a lockfile that holds only the package-manager document', () => {
+  const directory = fixture()
+  const lockfile = path.join(directory, 'pnpm-lock.yaml')
+  fs.writeFileSync(lockfile, fs.readFileSync(lockfile, 'utf8').replace(/\n---\n[\s\S]*$/, '\n'))
+  assert.equal(readLockedPnpmVersion(directory, '12'), '12.8.1')
 })
