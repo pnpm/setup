@@ -13,7 +13,7 @@
     "@actions/glob": "^0.7.0",
     "@actions/http-client": "^4.0.1",
     "@types/expand-tilde": "^2.0.2",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "@types/semver": "^7.8.0",
     "expand-tilde": "^2.0.2",
     "get-pnpm": "^0.0.5",
