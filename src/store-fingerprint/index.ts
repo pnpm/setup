@@ -1,16 +1,23 @@
 import { createHash } from 'crypto'
-import { lstat, readdir } from 'fs/promises'
+import { access, readdir } from 'fs/promises'
 import path from 'path'
 
 export async function fingerprintStore(storePath: string): Promise<string | undefined> {
-  const buckets = await readdir(path.join(storePath, 'files')).catch(() => [])
-  const entries = ['index.db', 'index.db-wal', ...buckets.sort().map(bucket => path.join('files', bucket))]
-  const stats = await Promise.all(entries.map(entry => lstat(path.join(storePath, entry)).catch(() => undefined)))
-  if (!stats[0]) return undefined
+  if (!await exists(path.join(storePath, 'index.db'))) return undefined
+
+  const filesPath = path.join(storePath, 'files')
+  const buckets = (await readdir(filesPath).catch(() => [])).sort()
+  const names = await Promise.all(
+    buckets.map(async bucket => (await readdir(path.join(filesPath, bucket)).catch(() => [])).sort()),
+  )
 
   const hash = createHash('sha256')
-  entries.forEach((entry, i) => {
-    hash.update(`${entry}:${stats[i] ? `${stats[i].size}:${stats[i].mtimeMs}` : 'none'}\n`)
+  buckets.forEach((bucket, i) => {
+    hash.update(`${bucket}:${names[i].join(',')}\n`)
   })
   return hash.digest('hex')
+}
+
+async function exists(file: string) {
+  return access(file).then(() => true, () => false)
 }

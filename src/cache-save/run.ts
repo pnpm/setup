@@ -16,13 +16,14 @@ export async function runSaveCache(inputs: Inputs) {
     return
   }
 
+  await pruneStore(inputs)
+
   const restoredFingerprint = getState('cache_store_fingerprint')
   if (restoredFingerprint && await fingerprintStore(cachePath) === restoredFingerprint) {
     info('The store has not changed since it was restored, not saving cache.')
     return
   }
 
-  await pruneStore(inputs)
   const cacheId = await saveCache([cachePath], primaryKey)
   if (cacheId == -1) return
 
