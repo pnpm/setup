@@ -79,6 +79,7 @@ beforeEach(() => {
   cache.restoreCache.mock.mockImplementation(async () => undefined)
   cache.saveCache.mock.resetCalls()
   prune.pruneStore.mock.resetCalls()
+  prune.pruneStore.mock.mockImplementation(async () => {})
   fingerprint.fingerprintStore.mock.resetCalls()
   fingerprint.fingerprintStore.mock.mockImplementation(async () => 'restored-store')
   glob.hashFiles.mock.resetCalls()
@@ -137,7 +138,19 @@ test('an unchanged store restored for the same lockfile and runtimes is not save
   await restoreBeforeInstall()
   await runSaveCache(inputs)
 
-  assert.equal(prune.pruneStore.mock.callCount(), 0)
+  assert.equal(prune.pruneStore.mock.callCount(), 1)
+  assert.equal(cache.saveCache.mock.callCount(), 0)
+})
+
+test('a store that only differs from the restored one before pruning is not saved', async () => {
+  cache.restoreCache.mock.mockImplementation(async () => sameRuntimeKey)
+  await restoreBeforeInstall()
+  let pruned = false
+  prune.pruneStore.mock.mockImplementation(async () => { pruned = true })
+  fingerprint.fingerprintStore.mock.mockImplementation(async () => pruned ? 'restored-store' : 'changed-store')
+  await runSaveCache(inputs)
+
+  assert.equal(prune.pruneStore.mock.callCount(), 1)
   assert.equal(cache.saveCache.mock.callCount(), 0)
 })
 

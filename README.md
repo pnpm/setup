@@ -209,6 +209,11 @@ runtime selectors and the versions actually installed. Reordering
 `devEngines.runtime` does not change the key — the same set of runtimes
 produces the same store.
 
+The store is saved at the end of the job only if its packages changed. After
+`pnpm store prune`, the action compares the names of the files in the store with
+those of the store it restored, so a job that installs from a warm cache does
+not upload it again. Timestamps and index writes alone do not count as a change.
+
 To restore the store without saving it, set `save-cache: false`. This is
 useful for jobs that should not write to the cache, such as pull requests or
 all but one job in a matrix. The lockfile verification cache is still saved.
