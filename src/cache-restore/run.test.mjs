@@ -32,6 +32,8 @@ const mocks = {
   '../store-fingerprint': `
     import { mock } from 'node:test'
     export const fingerprintStore = mock.fn(async () => 'restored-store')
+    let calls = 0
+    export const statStore = mock.fn(async () => \`stat-\${calls++}\`)
   `,
 }
 const bundle = await build({
@@ -82,6 +84,9 @@ beforeEach(() => {
   prune.pruneStore.mock.mockImplementation(async () => {})
   fingerprint.fingerprintStore.mock.resetCalls()
   fingerprint.fingerprintStore.mock.mockImplementation(async () => 'restored-store')
+  fingerprint.statStore.mock.resetCalls()
+  let stats = 0
+  fingerprint.statStore.mock.mockImplementation(async () => `stat-${stats++}`)
   glob.hashFiles.mock.resetCalls()
   verification.restoreVerificationCache.mock.resetCalls()
 })
@@ -139,6 +144,26 @@ test('an unchanged store restored for the same lockfile and runtimes is not save
   await runSaveCache(inputs)
 
   assert.equal(prune.pruneStore.mock.callCount(), 1)
+  assert.equal(cache.saveCache.mock.callCount(), 0)
+})
+
+test('the store is stat-ed before it is fingerprinted', async () => {
+  const calls = []
+  fingerprint.statStore.mock.mockImplementation(async () => { calls.push('stat'); return 'restored-stat' })
+  fingerprint.fingerprintStore.mock.mockImplementation(async () => { calls.push('fingerprint'); return 'restored-store' })
+  cache.restoreCache.mock.mockImplementation(async () => sameRuntimeKey)
+  await restoreBeforeInstall()
+
+  assert.deepEqual(calls, ['stat', 'fingerprint'])
+})
+
+test('a store that was not written to is neither pruned nor saved', async () => {
+  cache.restoreCache.mock.mockImplementation(async () => sameRuntimeKey)
+  fingerprint.statStore.mock.mockImplementation(async () => 'restored-stat')
+  await restoreBeforeInstall()
+  await runSaveCache(inputs)
+
+  assert.equal(prune.pruneStore.mock.callCount(), 0)
   assert.equal(cache.saveCache.mock.callCount(), 0)
 })
 
