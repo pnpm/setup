@@ -4,6 +4,8 @@ import { DatabaseSync } from 'node:sqlite'
 import path from 'path'
 import { pathToFileURL } from 'url'
 
+const BUCKETS_PER_BATCH = 16
+
 export async function fingerprintStore(storePath: string): Promise<string | undefined> {
   const indexKeys = await readIndexKeys(path.join(storePath, 'index.db'))
   if (!indexKeys) return undefined
@@ -13,12 +15,15 @@ export async function fingerprintStore(storePath: string): Promise<string | unde
 
   const filesPath = path.join(storePath, 'files')
   const buckets = (await readdir(filesPath).catch(() => [])).sort()
-  const names = await Promise.all(
-    buckets.map(async bucket => (await readdir(path.join(filesPath, bucket)).catch(() => [])).sort()),
-  )
-  buckets.forEach((bucket, i) => {
-    hash.update(`${bucket}:${names[i].join(',')}\n`)
-  })
+  for (let i = 0; i < buckets.length; i += BUCKETS_PER_BATCH) {
+    const batch = buckets.slice(i, i + BUCKETS_PER_BATCH)
+    const names = await Promise.all(
+      batch.map(async bucket => (await readdir(path.join(filesPath, bucket)).catch(() => [])).sort()),
+    )
+    batch.forEach((bucket, j) => {
+      hash.update(`${bucket}:${names[j].join(',')}\n`)
+    })
+  }
   return hash.digest('hex')
 }
 
