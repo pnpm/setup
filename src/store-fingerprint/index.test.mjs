@@ -30,6 +30,14 @@ test('changes outside the index and package files do not change the fingerprint'
   assert.equal(await fingerprintStore(store), before)
 })
 
+test('an empty write-ahead log has the same fingerprint as none', async () => {
+  const store = createStore()
+  writeFileSync(path.join(store, 'index.db-wal'), '')
+  const before = await fingerprintStore(store)
+  rmSync(path.join(store, 'index.db-wal'))
+  assert.equal(await fingerprintStore(store), before)
+})
+
 for (const [label, change] of [
   ['a written index', store => touch(path.join(store, 'index.db'))],
   ['a new write-ahead log', store => writeFileSync(path.join(store, 'index.db-wal'), 'rows')],
