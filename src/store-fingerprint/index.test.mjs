@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { after, test } from 'node:test'
 import { DatabaseSync } from 'node:sqlite'
-import { fingerprintStore } from './index.ts'
+import { fingerprintStore, statStore } from './index.ts'
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'setup-store-fingerprint-'))
 after(() => rmSync(root, { recursive: true, force: true }))
@@ -100,6 +100,26 @@ test('reading the index leaves no write-ahead log behind', async () => {
   await fingerprintStore(store)
   assert.equal(existsSync(path.join(store, 'index.db-wal')), false)
   assert.equal(existsSync(path.join(store, 'index.db-shm')), false)
+})
+
+test('the stat fingerprint changes when the index is written', async () => {
+  const store = createStore()
+  const before = await statStore(store)
+  writeIndex(store, ['a@1', 'b@1'])
+  assert.notEqual(await statStore(store), before)
+})
+
+test('the stat fingerprint is unchanged by reading the store', async () => {
+  const store = createStore()
+  const before = await statStore(store)
+  await fingerprintStore(store)
+  assert.equal(await statStore(store), before)
+})
+
+test('a store without an index has no stat fingerprint', async () => {
+  const store = createStore()
+  unlinkSync(path.join(store, 'index.db'))
+  assert.equal(await statStore(store), undefined)
 })
 
 test('a change in any bucket of a store with many buckets changes the fingerprint', async () => {

@@ -9,7 +9,7 @@ import { Inputs } from '../inputs'
 import { RuntimeRequest } from '../install-runtime'
 import { restoreVerificationCache } from '../lockfile-verification-cache'
 import { lockfileDir } from '../pnpm-install/lockfile'
-import { fingerprintStore } from '../store-fingerprint'
+import { fingerprintStore, statStore } from '../store-fingerprint'
 import { removeWindowsExtendedPathPrefix } from '../windows-path'
 import { getCacheKeyPrefix, getRestoreKeys, getSaveCacheKey, getSaveCacheKeyPrefix, isLockfileExactHit } from './keys'
 
@@ -97,7 +97,9 @@ export async function fingerprintRestoredStore(
   const saveKeyPrefix = getSaveCacheKeyPrefix(cache.lockfileKeyPrefix, resolvedRuntimes)
   if (!cache.restoredKey?.startsWith(saveKeyPrefix)) return
 
+  const stat = await statStore(cache.cachePath)
   const fingerprint = await fingerprintStore(cache.cachePath)
+  if (stat) saveState('cache_store_stat', stat)
   if (fingerprint) saveState('cache_store_fingerprint', fingerprint)
 }
 
