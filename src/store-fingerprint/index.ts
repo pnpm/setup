@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { createHash, type Hash } from 'crypto'
 import { access, lstat, readdir } from 'fs/promises'
 import { DatabaseSync } from 'node:sqlite'
 import path from 'path'
@@ -20,11 +20,8 @@ export async function statStore(storePath: string): Promise<string | undefined> 
 }
 
 export async function fingerprintStore(storePath: string): Promise<string | undefined> {
-  const indexKeys = await readIndexKeys(path.join(storePath, 'index.db'))
-  if (!indexKeys) return undefined
-
   const hash = createHash('sha256')
-  hash.update(`index:${indexKeys.join(',')}\n`)
+  if (!await hashIndexKeys(path.join(storePath, 'index.db'), hash)) return undefined
 
   const filesPath = path.join(storePath, 'files')
   const buckets = (await readdir(filesPath).catch(() => [])).sort()
@@ -40,19 +37,23 @@ export async function fingerprintStore(storePath: string): Promise<string | unde
   return hash.digest('hex')
 }
 
-async function readIndexKeys(indexPath: string): Promise<string[] | undefined> {
-  if (!await exists(indexPath)) return undefined
+async function hashIndexKeys(indexPath: string, hash: Hash): Promise<boolean> {
+  if (!await exists(indexPath)) return false
   const url = pathToFileURL(indexPath)
   url.searchParams.set('immutable', '1')
   try {
     const db = new DatabaseSync(url.href, { readOnly: true })
     try {
-      return db.prepare('SELECT key FROM package_index ORDER BY key').all().map(row => String(row.key))
+      hash.update('index\n')
+      for (const row of db.prepare('SELECT key FROM package_index ORDER BY key').iterate()) {
+        hash.update(`${String(row.key)}\n`)
+      }
+      return true
     } finally {
       db.close()
     }
   } catch {
-    return undefined
+    return false
   }
 }
 
