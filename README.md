@@ -210,9 +210,10 @@ runtime selectors and the versions actually installed. Reordering
 produces the same store.
 
 The store is saved at the end of the job only if its packages changed. After
-`pnpm store prune`, the action compares the names of the files in the store with
-those of the store it restored, so a job that installs from a warm cache does
-not upload it again. Timestamps and index writes alone do not count as a change.
+`pnpm store prune`, the action compares the packages in the index and the names
+of the files in the store with those of the store it restored, so a job that
+installs from a warm cache does not upload it again. Timestamps and other
+writes that leave the packages as they were do not count as a change.
 
 To restore the store without saving it, set `save-cache: false`. This is
 useful for jobs that should not write to the cache, such as pull requests or
