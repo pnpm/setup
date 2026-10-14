@@ -101,3 +101,12 @@ test('reading the index leaves no write-ahead log behind', async () => {
   assert.equal(existsSync(path.join(store, 'index.db-wal')), false)
   assert.equal(existsSync(path.join(store, 'index.db-shm')), false)
 })
+
+test('a change in any bucket of a store with many buckets changes the fingerprint', async () => {
+  const store = createStore()
+  for (let i = 1; i < 40; i++) mkdirSync(path.join(store, 'files', String(i).padStart(2, '0')))
+  const before = await fingerprintStore(store)
+  assert.equal(await fingerprintStore(store), before)
+  writeFileSync(path.join(store, 'files', '39', 'abc'), 'content')
+  assert.notEqual(await fingerprintStore(store), before)
+})
