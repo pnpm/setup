@@ -18,7 +18,7 @@ const { outputFiles } = await build({
         args.path === '@actions/core' ? 'export const info = () => {}; export const addPath = () => {}; export const exportVariable = () => {}' :
         args.path === './download' ? `
           export async function resolvePnpm(spec) { globalThis.selectedSpec = spec; return { version: /^\\d+\\.\\d+\\.\\d+$/.test(spec) ? spec : '12.8.2' } }
-          export async function downloadPnpm(resolved) { return resolved.version }
+          export async function installPnpm(resolved) { return resolved.version }
         ` : `
           import { EventEmitter } from 'node:events'
           export function spawn(version, args) {

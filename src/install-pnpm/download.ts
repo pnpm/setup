@@ -1,8 +1,12 @@
+import { info } from '@actions/core'
 import { HttpClient } from '@actions/http-client'
-import { chmod, copyFile, link, mkdir, rm } from 'fs/promises'
+import { cacheDir, find } from '@actions/tool-cache'
+import { existsSync } from 'fs'
+import { chmod, copyFile, link, mkdir, mkdtemp, rename, rm } from 'fs/promises'
+import os from 'os'
 import path from 'path'
 import semver from 'semver'
-import { downloadPnpm as downloadVerifiedPnpm } from 'get-pnpm'
+import { downloadPnpm as downloadVerifiedPnpm, isMusl } from 'get-pnpm'
 
 // The action installs pnpm's self-contained executable and uses `pnpm runtime`
 // to install a JavaScript runtime. Both are available from v11 onward, so that
@@ -50,39 +54,92 @@ To install older pnpm, use the pnpm/action-setup action instead.`)
 }
 
 /**
- * Places the pnpm executable in `destDir` and returns its path.
+ * Returns the path to the resolved pnpm executable in the runner's tool cache,
+ * downloading it first if the cache does not have that version.
+ *
+ * The download goes into a temporary directory, and `cacheDir` copies it into
+ * the tool cache. `cacheDir` writes the `.complete` marker that `find` checks
+ * only after the copy finishes, so a failed download or copy leaves no entry
+ * for a later run to find.
+ */
+export async function installPnpm(resolved: ResolvedPnpm): Promise<string> {
+  const arch = toolCacheArch()
+  let toolDir = find('pnpm', resolved.version, arch)
+  if (toolDir) {
+    info(`Found pnpm ${resolved.version} in the tool cache`)
+  } else {
+    info(`Downloading pnpm ${resolved.version} from ${resolved.registry}`)
+    const staging = await mkdtemp(path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'setup-pnpm-'))
+    try {
+      await downloadPnpm(resolved, staging)
+      toolDir = await cacheDir(staging, 'pnpm', resolved.version, arch)
+    } finally {
+      await rm(staging, { recursive: true, force: true })
+    }
+  }
+  // `cacheDir` copies files instead of preserving hard links, so aliases
+  // created before caching would each become a full copy of the executable.
+  // They are linked inside the tool cache directory instead.
+  const pnpmBin = path.join(toolDir, executableName('pnpm'))
+  await linkAliases(pnpmBin)
+  return pnpmBin
+}
+
+/**
+ * pnpm publishes separate executables for musl and glibc Linux on the same
+ * CPU, so musl hosts use a separate `<arch>-musl` tool cache entry.
+ */
+function toolCacheArch(): string {
+  return isMusl() ? `${os.arch()}-musl` : os.arch()
+}
+
+/**
+ * Places the pnpm executable in `destDir`.
  *
  * `get-pnpm` resolves the platform package, checks npm's signature over its
  * checksum against a pinned key, checks the download against that checksum, and
- * places the executable beside the `dist/` tree it loads. The `pnpx`, `pn` and
- * `pnx` aliases are linked next to it, which the binary dispatches on.
+ * places the executable beside the `dist/` tree it loads.
  */
-export async function downloadPnpm(resolved: ResolvedPnpm, destDir: string): Promise<string> {
+async function downloadPnpm(resolved: ResolvedPnpm, destDir: string): Promise<void> {
   await mkdir(destDir, { recursive: true })
   await downloadVerifiedPnpm({ versionSpec: resolved.version, registry: resolved.registry, dest: destDir })
   // Up to v11 get-pnpm writes a manifest so that `pnpm setup` installs the
-  // wrapper's dependencies. This action never runs setup — it owns this
-  // directory and puts it on PATH — so the manifest would just be a stray
-  // project file sitting where commands run.
+  // wrapper's dependencies. This action never runs setup. It adds this
+  // directory to PATH itself, so the manifest would only be a stray project
+  // file in a directory on PATH.
   await rm(path.join(destDir, 'package.json'), { force: true })
 
-  const exe = process.platform === 'win32' ? 'pnpm.exe' : 'pnpm'
-  const pnpmBin = path.join(destDir, exe)
   if (process.platform !== 'win32') {
-    await chmod(pnpmBin, 0o755)
+    await chmod(path.join(destDir, executableName('pnpm')), 0o755)
   }
+}
 
+/**
+ * Links the `pnpx`, `pn` and `pnx` aliases next to the executable. The
+ * executable checks the name it was invoked by to decide what to run.
+ *
+ * A cached entry that an earlier job set up already has its aliases, so this
+ * skips aliases that exist. Replacing them would also fail on Windows while
+ * another process runs the alias.
+ */
+async function linkAliases(pnpmBin: string): Promise<void> {
   for (const alias of ['pnpx', 'pn', 'pnx']) {
-    const aliasPath = path.join(destDir, process.platform === 'win32' ? `${alias}.exe` : alias)
-    await rm(aliasPath, { force: true })
+    const aliasPath = path.join(path.dirname(pnpmBin), executableName(alias))
+    if (existsSync(aliasPath)) continue
     try {
       await link(pnpmBin, aliasPath)
     } catch {
-      await copyFile(pnpmBin, aliasPath)
+      // Copy under a temporary name and rename it afterwards. If the copy is
+      // interrupted, the alias does not exist, and the next run retries it.
+      const partial = `${aliasPath}.partial`
+      await copyFile(pnpmBin, partial)
+      await rename(partial, aliasPath)
     }
   }
+}
 
-  return pnpmBin
+function executableName(name: string): string {
+  return process.platform === 'win32' ? `${name}.exe` : name
 }
 
 async function resolveVersion(spec: string, registry: string): Promise<string> {
