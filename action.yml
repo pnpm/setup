@@ -28,7 +28,10 @@ inputs:
       for `pnpm install`.
     required: false
   dest:
-    description: Where to store pnpm files
+    description: |
+      Directory used as `PNPM_HOME`, where runtimes and global binaries are
+      installed. The pnpm executable itself is kept in the runner's tool
+      cache and reused when the same version is requested again.
     required: false
     default: ~/setup-pnpm
   runtime:
@@ -155,7 +158,7 @@ outputs:
   dest:
     description: Expanded path of inputs#dest
   bin-dest:
-    description: Location of `pnpm` and `pnpx` command
+    description: Location of `pnpm` and `pnpx` command, inside the runner's tool cache
   runtime-name:
     description: Name of the first installed runtime (`node`, `bun`, or `deno`), or empty if none was installed
   runtime-version:

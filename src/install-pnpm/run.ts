@@ -1,4 +1,4 @@
-import { addPath, exportVariable, info } from '@actions/core'
+import { addPath, exportVariable } from '@actions/core'
 import { spawn } from 'child_process'
 import { readFileSync } from 'fs'
 import { mkdir, rm } from 'fs/promises'
@@ -6,7 +6,7 @@ import path from 'path'
 import util from 'util'
 import { parse as parseYaml } from 'yaml'
 import { Inputs } from '../inputs'
-import { downloadPnpm, resolvePnpm } from './download'
+import { installPnpm, resolvePnpm } from './download'
 import { readLockedPnpmVersion } from './locked-version'
 import { packageManagerLockfileDirectory, packageManagerManifest } from './project'
 
@@ -32,14 +32,14 @@ export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerRes
     ? readLockedPnpmVersion(lockfileDirectory, spec)
     : undefined
   const resolved = await resolvePnpm(lockedVersion ?? spec, registry)
-  info(`Downloading pnpm ${resolved.version} from ${resolved.registry}`)
 
   await rm(dest, { recursive: true, force: true })
   // Create dest/bin upfront: pnpm ≤ 12.0.0-alpha.17 refuses to run
   // `pnpm runtime set -g` when the global bin directory is missing
   // (fixed in alpha.18, but users may pin older versions).
   await mkdir(path.join(dest, 'bin'), { recursive: true })
-  const pnpmBin = await downloadPnpm(resolved, dest)
+  const pnpmBin = await installPnpm(resolved)
+  const binDest = path.dirname(pnpmBin)
 
   // Sanity check — catches a binary that can't run on this system (e.g. a
   // glibc build on a musl-only distro) with a clear error.
@@ -48,15 +48,17 @@ export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerRes
     throw new Error(`The installed pnpm reports version ${actualVersion}, expected ${resolved.version}`)
   }
 
-  // dest doubles as PNPM_HOME: `pnpm runtime set -g` installs runtime
-  // binaries into $PNPM_HOME/bin and `pnpm self-update` places its shims
-  // there. dest/bin is added after dest so it gets higher PATH precedence —
-  // a self-updated pnpm must win over the executable this action installed.
+  // pnpm runs from the tool cache, and dest is PNPM_HOME. `pnpm runtime set -g`
+  // installs runtime binaries into $PNPM_HOME/bin, and `pnpm self-update`
+  // puts its shims there. addPath prepends, so each later call takes PATH
+  // precedence over the earlier ones. That order lets a self-updated pnpm in
+  // dest/bin run instead of the executable from the tool cache.
+  addPath(binDest)
   addPath(dest)
   addPath(path.join(dest, 'bin'))
   exportVariable('PNPM_HOME', dest)
 
-  return { binDest: dest, pnpmHome: dest }
+  return { binDest, pnpmHome: dest }
 }
 
 /**
