@@ -77,7 +77,7 @@ async function runMain() {
     // next cannot alter what later jobs restore. When `install` is false the
     // log is not complete yet — the job installs in a step of its own, and the
     // post step is the first moment it is known to be done.
-    await saveVerificationCache(1)
+    if (inputs.saveCache) await saveVerificationCache(1)
   }
 }
 
@@ -87,7 +87,7 @@ async function runPost() {
   // installed, the log was already saved then. Runs before saveCache, which
   // prunes the store, because pnpm versions before pnpm/pnpm#13893 delete the
   // log during a prune.
-  await saveVerificationCache()
+  if (inputs.saveCache) await saveVerificationCache()
   await saveCache(inputs)
 }
 
