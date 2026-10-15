@@ -27,7 +27,7 @@ Only one version of each runtime can be installed globally. If a runtime name is
 | `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime`, then to `lts` (for `node`) / `latest`. Node.js also supports version files with the precedence described below. If the input itself is omitted, installs every entry in `devEngines.runtime` and adds Node.js when a version file supplies it. |
 | `node-version-file` | Optional Node.js version file path, relative to `working-directory`. By default, checks `.node-version`, `.nvmrc`, then `.tool-versions` when the manifest does not declare Node.js. Set to `false` to disable file detection. An explicit path overrides the manifest; an explicit version in `runtime` overrides both. |
 | `cache` | Cache the pnpm store directory and restore it before installing the runtimes. Default: `false`. |
-| `save-cache` | Save the pnpm store at the end of the job when `cache` is `true`. Set to `false` to only restore it. Default: `true`. |
+| `save-cache` | Save the pnpm store when `cache` is `true`, and the lockfile verification cache. Set to `false` to only restore them. Default: `true`. |
 | `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Relative to `GITHUB_WORKSPACE`. Defaults to the shared workspace lockfile for members, or `pnpm-lock.yaml` inside `working-directory` otherwise. |
 | `working-directory` | Directory the project lives in, relative to `GITHUB_WORKSPACE`. `pnpm install` runs there and `node-version-file` resolves relative to it. Package-manager selection and shared-lockfile caching follow the workspace root for members. Default: `.`. |
 | `package-json-file` | **Deprecated** — use `working-directory`. Still honoured on its own; the directory containing the file becomes the working directory. |
@@ -211,7 +211,8 @@ produces the same store.
 
 To restore the store without saving it, set `save-cache: false`. This is
 useful for jobs that should not write to the cache, such as pull requests or
-all but one job in a matrix. The lockfile verification cache is still saved.
+all but one job in a matrix. It also stops the [lockfile verification
+cache](#lockfile-verification-cache) from being saved.
 
 ```yaml
 - uses: pnpm/setup@v3
@@ -230,7 +231,8 @@ lockfile is not re-checked against the registry.
 
 The action restores and saves that file on every run, independently of the
 `cache` input, because a job that starts without it pays for the check every
-time. On a repository with ~2000 lockfile entries and a warm store:
+time. With `save-cache: false` it is restored but not saved. On a repository
+with ~2000 lockfile entries and a warm store:
 
 | | without the log | with it |
 | --- | --- | --- |
