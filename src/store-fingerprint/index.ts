@@ -42,6 +42,7 @@ export async function fingerprintStore(storePath: string): Promise<string | unde
 async function hashIndex(indexPath: string, hash: Hash): Promise<boolean> {
   if (!await exists(indexPath)) return false
   if (await hasPendingWrites(`${indexPath}-wal`)) return false
+  const before = await stampIndex(indexPath)
   const url = pathToFileURL(indexPath)
   url.searchParams.set('immutable', '1')
   try {
@@ -49,16 +50,22 @@ async function hashIndex(indexPath: string, hash: Hash): Promise<boolean> {
     try {
       hash.update('index\n')
       for (const row of db.prepare('SELECT key, data FROM package_index ORDER BY key').iterate()) {
-        hash.update(`${String(row.key)}\n`)
-        hash.update(row.data as Uint8Array)
+        const data = row.data as Uint8Array
+        hash.update(`${String(row.key)}\n${data.length}\n`)
+        hash.update(data)
       }
-      return true
     } finally {
       db.close()
     }
+    return before === await stampIndex(indexPath)
   } catch {
     return false
   }
+}
+
+async function stampIndex(indexPath: string) {
+  const stats = await Promise.all([indexPath, `${indexPath}-wal`].map(file => lstat(file).catch(() => undefined)))
+  return stats.map(stat => stat ? `${stat.size}:${stat.mtimeMs}` : 'none').join('|')
 }
 
 async function hasPendingWrites(walPath: string) {

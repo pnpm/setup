@@ -108,6 +108,16 @@ test('an index with writes still in the write-ahead log has no fingerprint', asy
   }
 })
 
+test('an index written while it is being read has no fingerprint', async t => {
+  const store = createStore()
+  const prepare = DatabaseSync.prototype.prepare
+  t.mock.method(DatabaseSync.prototype, 'prepare', function (sql) {
+    if (sql.startsWith('SELECT key')) writeIndex(store, ['a@1', 'b@1'])
+    return prepare.call(this, sql)
+  })
+  assert.equal(await fingerprintStore(store), undefined)
+})
+
 test('reading the index leaves no write-ahead log behind', async () => {
   const store = createStore()
   await fingerprintStore(store)
