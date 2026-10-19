@@ -19,13 +19,13 @@ function createStore() {
   return store
 }
 
-function writeIndex(store, keys) {
+function writeIndex(store, keys, data = 'data') {
   const db = new DatabaseSync(path.join(store, 'index.db'))
   db.exec('PRAGMA journal_mode=WAL')
   db.exec('CREATE TABLE IF NOT EXISTS package_index (key TEXT PRIMARY KEY, data BLOB NOT NULL) WITHOUT ROWID')
   db.exec('DELETE FROM package_index')
   const insert = db.prepare('INSERT INTO package_index (key, data) VALUES (?, ?)')
-  for (const key of keys) insert.run(key, Buffer.from('data'))
+  for (const key of keys) insert.run(key, Buffer.from(data))
   db.close()
 }
 
@@ -62,6 +62,7 @@ for (const [label, change] of [
 for (const [label, change] of [
   ['a package added to the index', store => writeIndex(store, ['a@1', 'b@1'])],
   ['a package removed from the index', store => writeIndex(store, [])],
+  ['an index row rewritten under the same key', store => writeIndex(store, ['a@1'], 'rewritten')],
   ['a package file added', store => writeFileSync(path.join(store, 'files', '00', 'def'), 'content')],
   ['an executable package file added', store => writeFileSync(path.join(store, 'files', '00', 'def-exec'), 'content')],
   ['a package file removed', store => unlinkSync(path.join(store, 'files', '00', 'abc'))],
@@ -93,6 +94,18 @@ test('an unreadable index has no fingerprint', async () => {
   const store = createStore()
   writeFileSync(path.join(store, 'index.db'), 'not a database')
   assert.equal(await fingerprintStore(store), undefined)
+})
+
+test('an index with writes still in the write-ahead log has no fingerprint', async () => {
+  const store = createStore()
+  const db = new DatabaseSync(path.join(store, 'index.db'))
+  db.exec('PRAGMA wal_autocheckpoint=0')
+  db.exec("INSERT INTO package_index (key, data) VALUES ('b@1', x'00')")
+  try {
+    assert.equal(await fingerprintStore(store), undefined)
+  } finally {
+    db.close()
+  }
 })
 
 test('reading the index leaves no write-ahead log behind', async () => {

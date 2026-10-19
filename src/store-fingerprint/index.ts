@@ -21,7 +21,8 @@ export async function statStore(storePath: string): Promise<string | undefined> 
 
 export async function fingerprintStore(storePath: string): Promise<string | undefined> {
   const hash = createHash('sha256')
-  if (!await hashIndexKeys(path.join(storePath, 'index.db'), hash)) return undefined
+  if (!await hashIndex(path.join(storePath, 'index.db'), hash)) return undefined
+  hash.update('files\n')
 
   const filesPath = path.join(storePath, 'files')
   const buckets = (await readdir(filesPath).catch(() => [])).sort()
@@ -37,16 +38,18 @@ export async function fingerprintStore(storePath: string): Promise<string | unde
   return hash.digest('hex')
 }
 
-async function hashIndexKeys(indexPath: string, hash: Hash): Promise<boolean> {
+async function hashIndex(indexPath: string, hash: Hash): Promise<boolean> {
   if (!await exists(indexPath)) return false
+  if (await hasPendingWrites(`${indexPath}-wal`)) return false
   const url = pathToFileURL(indexPath)
   url.searchParams.set('immutable', '1')
   try {
     const db = new DatabaseSync(url.href, { readOnly: true })
     try {
       hash.update('index\n')
-      for (const row of db.prepare('SELECT key FROM package_index ORDER BY key').iterate()) {
+      for (const row of db.prepare('SELECT key, data FROM package_index ORDER BY key').iterate()) {
         hash.update(`${String(row.key)}\n`)
+        hash.update(row.data as Uint8Array)
       }
       return true
     } finally {
@@ -55,6 +58,11 @@ async function hashIndexKeys(indexPath: string, hash: Hash): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+async function hasPendingWrites(walPath: string) {
+  const stat = await lstat(walPath).catch(() => undefined)
+  return stat !== undefined && stat.size > 0
 }
 
 async function exists(file: string) {
