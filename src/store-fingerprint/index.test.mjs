@@ -129,6 +129,20 @@ test('the stat fingerprint is unchanged by reading the store', async () => {
   assert.equal(await statStore(store), before)
 })
 
+test('the stat fingerprint treats an empty write-ahead log as missing', async () => {
+  const store = createStore()
+  const before = await statStore(store)
+  writeFileSync(path.join(store, 'index.db-wal'), '')
+  assert.equal(await statStore(store), before)
+})
+
+test('the stat fingerprint changes when a write-ahead log has content', async () => {
+  const store = createStore()
+  const before = await statStore(store)
+  writeFileSync(path.join(store, 'index.db-wal'), 'rows')
+  assert.notEqual(await statStore(store), before)
+})
+
 test('a store without an index has no stat fingerprint', async () => {
   const store = createStore()
   unlinkSync(path.join(store, 'index.db'))
