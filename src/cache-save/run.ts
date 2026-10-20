@@ -2,7 +2,7 @@ import { saveCache } from '@actions/cache'
 import { getState, info } from '@actions/core'
 import { Inputs } from '../inputs'
 import pruneStore from '../pnpm-store-prune'
-import { fingerprintStore } from '../store-fingerprint'
+import { fingerprintStore, statStore } from '../store-fingerprint'
 
 export async function runSaveCache(inputs: Inputs) {
   const primaryKey = getState('cache_primary_key')
@@ -16,13 +16,20 @@ export async function runSaveCache(inputs: Inputs) {
     return
   }
 
+  const restoredStat = getState('cache_store_stat')
+  if (restoredStat && await statStore(cachePath) === restoredStat) {
+    info('The store has not been written to since it was restored, not saving cache.')
+    return
+  }
+
+  await pruneStore(inputs)
+
   const restoredFingerprint = getState('cache_store_fingerprint')
   if (restoredFingerprint && await fingerprintStore(cachePath) === restoredFingerprint) {
     info('The store has not changed since it was restored, not saving cache.')
     return
   }
 
-  await pruneStore(inputs)
   const cacheId = await saveCache([cachePath], primaryKey)
   if (cacheId == -1) return
 
