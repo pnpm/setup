@@ -36,6 +36,10 @@ function touch(file) {
 
 for (const [label, change] of [
   ['scratch files outside the package files', store => writeFileSync(path.join(store, 'tmp', 'abc'), 'scratch')],
+  ['an index row rewritten with other content of the same size', store => {
+    writeIndex(store, ['a@1'], 'DATA')
+    touch(path.join(store, 'index.db'))
+  }],
   ['a rewritten index with the same packages', store => {
     writeIndex(store, ['a@1'])
     touch(path.join(store, 'index.db'))
@@ -62,7 +66,7 @@ for (const [label, change] of [
 for (const [label, change] of [
   ['a package added to the index', store => writeIndex(store, ['a@1', 'b@1'])],
   ['a package removed from the index', store => writeIndex(store, [])],
-  ['an index row rewritten under the same key', store => writeIndex(store, ['a@1'], 'rewritten')],
+  ['an index row rewritten to a different size under the same key', store => writeIndex(store, ['a@1'], 'rewritten')],
   ['a package file added', store => writeFileSync(path.join(store, 'files', '00', 'def'), 'content')],
   ['an executable package file added', store => writeFileSync(path.join(store, 'files', '00', 'def-exec'), 'content')],
   ['a package file removed', store => unlinkSync(path.join(store, 'files', '00', 'abc'))],

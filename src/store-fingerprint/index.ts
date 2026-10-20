@@ -49,10 +49,8 @@ async function hashIndex(indexPath: string, hash: Hash): Promise<boolean> {
     const db = new DatabaseSync(url.href, { readOnly: true })
     try {
       hash.update('index\n')
-      for (const row of db.prepare('SELECT key, data FROM package_index ORDER BY key').iterate()) {
-        const data = row.data as Uint8Array
-        hash.update(`${String(row.key)}\n${data.length}\n`)
-        hash.update(data)
+      for (const row of db.prepare('SELECT key, length(data) AS size FROM package_index ORDER BY key').iterate()) {
+        hash.update(`${String(row.key)}\n${String(row.size)}\n`)
       }
     } finally {
       db.close()
