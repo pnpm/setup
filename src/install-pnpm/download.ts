@@ -3,6 +3,7 @@ import { chmod, copyFile, link, mkdir, rm } from 'fs/promises'
 import path from 'path'
 import semver from 'semver'
 import { downloadPnpm as downloadVerifiedPnpm } from 'get-pnpm'
+import { withRetries } from './retry'
 
 // The action installs pnpm's self-contained executable and uses `pnpm runtime`
 // to install a JavaScript runtime. Both are available from v11 onward, so that
@@ -59,7 +60,12 @@ To install older pnpm, use the pnpm/action-setup action instead.`)
  */
 export async function downloadPnpm(resolved: ResolvedPnpm, destDir: string): Promise<string> {
   await mkdir(destDir, { recursive: true })
-  await downloadVerifiedPnpm({ versionSpec: resolved.version, registry: resolved.registry, dest: destDir })
+  // `get-pnpm` fetches the metadata and tarball exactly once (single 30s
+  // timeout), so a transient network blip would fail the job. Retry the
+  // transient cases; version, platform and signature errors stay final.
+  await withRetries('Downloading pnpm', () =>
+    downloadVerifiedPnpm({ versionSpec: resolved.version, registry: resolved.registry, dest: destDir }),
+  )
   // Up to v11 get-pnpm writes a manifest so that `pnpm setup` installs the
   // wrapper's dependencies. This action never runs setup — it owns this
   // directory and puts it on PATH — so the manifest would just be a stray
@@ -121,10 +127,17 @@ async function fetchPnpmVersions(registry: string): Promise<string[]> {
 }
 
 async function fetchJson<T>(url: string, headers?: Record<string, string>): Promise<T> {
-  const response = await http.getJson<T>(url, headers)
-  if (response.result == null) {
-    throw new Error(`Unexpected empty response from ${url}`)
-  }
-  return response.result
+  return withRetries(`Fetching ${url}`, async () => {
+    const response = await http.getJson<T>(url, headers)
+    // @actions/http-client retries GET 502/503/504 itself; surface 429 and the
+    // remaining 5xx so the outer retry covers them and connection errors too.
+    if (response.statusCode === 429 || response.statusCode >= 500) {
+      throw new Error(`Transient response from ${url}: HTTP ${response.statusCode}`)
+    }
+    if (response.result == null) {
+      throw new Error(`Unexpected empty response from ${url}`)
+    }
+    return response.result
+  })
 }
 
