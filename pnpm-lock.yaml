@@ -27,8 +27,8 @@ importers:
         specifier: ^2.0.2
         version: 2.0.2
       '@types/node':
-        specifier: ^26.6.4
-        version: 26.6.4
+        specifier: ^26.6.5
+        version: 26.6.5
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
@@ -36,8 +36,8 @@ importers:
         specifier: ^2.0.2
         version: 2.0.2
       get-pnpm:
-        specifier: ^0.0.5
-        version: 0.0.5
+        specifier: ^0.0.6
+        version: 0.0.6
       semver:
         specifier: ^7.8.5
         version: 7.8.5
@@ -299,8 +299,8 @@ packages:
   '@types/expand-tilde@2.0.2':
     resolution: {integrity: sha512-wlsMYiapmIR4Eq/Z0qysN8xaDMjSkO6AIDNFx9oxgWGeKVA1jU+NzwPRZErBNP5z6/dx6QNkNpKglBGPO9OkTA==}
 
-  '@types/node@26.6.4':
-    resolution: {integrity: sha512-ldVPDCzj7fsaGZrLB0NuHuTvJcsNasysBAqMolr/cgxrLd1xbqxIr3XJiPnHHJUCxj5sNF1vnRj9aWnrVh5Jcg==}
+  '@types/node@26.6.5':
+    resolution: {integrity: sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==}
 
   '@types/semver@7.8.0':
     resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
@@ -473,8 +473,8 @@ packages:
     resolution: {integrity: sha512-R9iDuNrQYeQut46cn2r2wHKn4HYzVDvDm5J1wW+koZewykv0yuO2HChTYeZtrULyHIDM9cj9TUXloCsueCQUog==}
     hasBin: true
 
-  get-pnpm@0.0.5:
-    resolution: {integrity: sha512-70vqRw+aJCLUKEwKzN4vS6+zPnsZ3gm0eBfjwD8VPUlb/9HkGfjvruGeN+AHRQ1d3s1x9Ld2ewgSfc7QfuUGyw==}
+  get-pnpm@0.0.6:
+    resolution: {integrity: sha512-fSE463qhWgDtDBjefiawt69k/LtZlnKf6QHPsMWqKi4p95MQ/PRhr631rn0SJdDd3MONGrA0Jpvw7YYZ3rchDQ==}
     engines: {node: '>=22.13'}
     hasBin: true
 
@@ -800,7 +800,7 @@ snapshots:
 
   '@types/expand-tilde@2.0.2': {}
 
-  '@types/node@26.6.4':
+  '@types/node@26.6.5':
     dependencies:
       undici-types: 8.9.0
 
@@ -937,7 +937,9 @@ snapshots:
       strnum: 2.4.2
       xml-naming: 0.3.0
 
-  get-pnpm@0.0.5: {}
+  get-pnpm@0.0.6:
+    dependencies:
+      semver: 7.8.5
 
   homedir-polyfill@1.0.3:
     dependencies:

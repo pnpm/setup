@@ -3,4 +3,4 @@ packages:
 allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
-  - get-pnpm@0.0.1
+  - get-pnpm@0.0.1 || 0.0.6
