@@ -9,8 +9,11 @@ import { warning } from '@actions/core'
 const DEFAULT_MAX_ATTEMPTS = 3
 const DEFAULT_BASE_DELAY_MS = 1000
 
+// `timeout` covers "Request timeout"-style messages; the HTTP status numbers
+// exclude adjacent digits and dots so version strings like "5.500.0" or
+// "4.429.0" are not mistaken for 5xx/429 responses.
 const TRANSIENT_MESSAGE =
-  /timed out|fetch failed|socket hang up|\bECONNRESET\b|\bETIMEDOUT\b|\bECONNABORTED\b|\bENOTFOUND\b|\bEAI_AGAIN\b|\bEHOSTUNREACH\b|\bENETUNREACH\b|\bEPIPE\b|\bUND_ERR|\b429\b|\b5\d\d\b/i
+  /timed out|timeout|fetch failed|socket hang up|\bECONNRESET\b|\bETIMEDOUT\b|\bECONNABORTED\b|\bENOTFOUND\b|\bEAI_AGAIN\b|\bEHOSTUNREACH\b|\bENETUNREACH\b|\bEPIPE\b|\bUND_ERR|(?<![\d.])429(?![\d.])|(?<![\d.])5\d\d(?![\d.])/i
 
 const TRANSIENT_CODE = /^(ECONNRESET|ETIMEDOUT|ECONNABORTED|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|EPIPE|UND_ERR)/
 
