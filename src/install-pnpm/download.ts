@@ -18,8 +18,11 @@ interface AbbreviatedPackument {
   readonly versions: Record<string, unknown>
 }
 
-// HTTPS_PROXY/NO_PROXY are honored automatically by @actions/http-client.
-const http = new HttpClient('pnpm/setup', undefined, { allowRetries: true, maxRetries: 3 })
+// HTTPS_PROXY/NO_PROXY are honored automatically by @actions/http-client. The
+// client does not retry on its own: every transient case is retried by the
+// outer withRetries, so the attempt budget stays at maxAttempts total requests
+// instead of multiplying into nested retries.
+const http = new HttpClient('pnpm/setup')
 
 /**
  * A resolved version, and the registry it was resolved against — the download
@@ -129,8 +132,8 @@ async function fetchPnpmVersions(registry: string): Promise<string[]> {
 async function fetchJson<T>(url: string, headers?: Record<string, string>): Promise<T> {
   return withRetries(`Fetching ${url}`, async () => {
     const response = await http.getJson<T>(url, headers)
-    // @actions/http-client retries GET 502/503/504 itself; surface 429 and the
-    // remaining 5xx so the outer retry covers them and connection errors too.
+    // Surface 429 and 5xx so the outer retry covers them along with
+    // connection errors.
     if (response.statusCode === 429 || response.statusCode >= 500) {
       throw new Error(`Transient response from ${url}: HTTP ${response.statusCode}`)
     }
@@ -140,4 +143,3 @@ async function fetchJson<T>(url: string, headers?: Record<string, string>): Prom
     return response.result
   })
 }
-
