@@ -6,7 +6,7 @@ import path from 'path'
 import util from 'util'
 import { parse as parseYaml } from 'yaml'
 import { Inputs } from '../inputs'
-import { downloadPnpm, resolvePnpm } from './download'
+import { downloadPnpm } from './download'
 import { readLockedPnpmVersion } from './locked-version'
 import { packageManagerLockfileDirectory, packageManagerManifest } from './project'
 
@@ -31,21 +31,21 @@ export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerRes
   const lockedVersion = lockfileDirectory
     ? readLockedPnpmVersion(lockfileDirectory, spec)
     : undefined
-  const resolved = await resolvePnpm(lockedVersion ?? spec, registry)
-  info(`Downloading pnpm ${resolved.version} from ${resolved.registry}`)
+  const versionSpec = lockedVersion ?? spec
+  info(`Downloading pnpm ${versionSpec} from ${registry}`)
 
   await rm(dest, { recursive: true, force: true })
   // Create dest/bin upfront: pnpm ≤ 12.0.0-alpha.17 refuses to run
   // `pnpm runtime set -g` when the global bin directory is missing
   // (fixed in alpha.18, but users may pin older versions).
   await mkdir(path.join(dest, 'bin'), { recursive: true })
-  const pnpmBin = await downloadPnpm(resolved, dest)
+  const { version: installedVersion, binPath: pnpmBin } = await downloadPnpm(versionSpec, registry, dest)
 
   // Sanity check — catches a binary that can't run on this system (e.g. a
   // glibc build on a musl-only distro) with a clear error.
   const actualVersion = await readVersion(pnpmBin)
-  if (actualVersion !== resolved.version) {
-    throw new Error(`The installed pnpm reports version ${actualVersion}, expected ${resolved.version}`)
+  if (actualVersion !== installedVersion) {
+    throw new Error(`The installed pnpm reports version ${actualVersion}, expected ${installedVersion}`)
   }
 
   // dest doubles as PNPM_HOME: `pnpm runtime set -g` installs runtime

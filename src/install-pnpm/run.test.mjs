@@ -17,8 +17,11 @@ const { outputFiles } = await build({
       build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents:
         args.path === '@actions/core' ? 'export const info = () => {}; export const addPath = () => {}; export const exportVariable = () => {}' :
         args.path === './download' ? `
-          export async function resolvePnpm(spec) { globalThis.selectedSpec = spec; return { version: /^\\d+\\.\\d+\\.\\d+$/.test(spec) ? spec : '12.8.2' } }
-          export async function downloadPnpm(resolved) { return resolved.version }
+          export async function downloadPnpm(spec) {
+            globalThis.selectedSpec = spec
+            const version = /^\\d+\\.\\d+\\.\\d+$/.test(spec) ? spec : '12.8.2'
+            return { version, binPath: version }
+          }
         ` : `
           import { EventEmitter } from 'node:events'
           export function spawn(version, args) {

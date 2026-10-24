@@ -286,8 +286,8 @@ jobs:
         shell: bash
 
   version-range:
-    # `version` may be a semver range. While v12 only has prereleases the
-    # range resolution falls back to prerelease versions.
+    # `version` may be a semver range. get-pnpm resolves it against the
+    # `pnpm` package's published versions.
     name: 'Version from semver range (^12.0.0-0)'
     runs-on: ubuntu-latest
     steps:
