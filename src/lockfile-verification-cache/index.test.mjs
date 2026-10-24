@@ -111,6 +111,9 @@ test('a warning printed ahead of the cache path is not part of the path', async 
   })
   await loadStep().restoreVerificationCache('hash')
   assert.equal(restoredPath(fixture), log)
+  writeFileSync(log, 'a\n')
+  await loadStep().saveVerificationCache()
+  assert.equal(fixture.saves, 1)
 })
 
 test('usage text from a pnpm without `cache path` falls back to the configured directory', async t => {
