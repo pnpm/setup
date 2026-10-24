@@ -98,3 +98,12 @@ test('still retries genuine HTTP 429 and 5xx messages', () => {
   assert.equal(isTransientNetworkError(new Error('502 Bad Gateway')), true)
   assert.equal(isTransientNetworkError(new Error('HTTP 429 Too Many Requests')), true)
 })
+
+test('does not retry an unknown-version error whose version contains "timeout"', () => {
+  assert.equal(
+    isTransientNetworkError(
+      new Error('Sorry! pnpm version "12.0.0-timeout.1" could not be found. Available tags: latest, next-12'),
+    ),
+    false,
+  )
+})
