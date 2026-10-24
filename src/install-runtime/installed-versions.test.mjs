@@ -51,7 +51,7 @@ test('reports the signal when the listing is terminated', { skip: process.platfo
   const versions = await getInstalledRuntimeVersions(['node'], binDest)
 
   assert.deepEqual([...versions], [])
-  assert.match(logged.join(''), /::warning::Unable to determine the installed runtime versions: pnpm list --global --json --depth 0 exited with SIGTERM/)
+  assert.match(logged.join(''), /::warning::Unable to determine the installed runtime versions: pnpm .*list --global --json --depth 0 exited with SIGTERM/)
 })
 
 test('reports the exit code when the listing fails', { skip: process.platform === 'win32' }, async t => {
@@ -67,6 +67,31 @@ test('reports the exit code when the listing fails', { skip: process.platform ==
 test('reads the version out of a successful listing', { skip: process.platform === 'win32' }, async t => {
   const listing = JSON.stringify([{ dependencies: { node: { version: '24.9.0' } } }])
   const binDest = fakePnpm(t, `cat <<'JSON'\n${listing}\nJSON`)
+  captureStdout(t)
+
+  const versions = await getInstalledRuntimeVersions(['node'], binDest)
+
+  assert.deepEqual([...versions], [['node', '24.9.0']])
+})
+
+for (const [label, preamble] of [
+  ['a warning', '[WARN] Using --global skips the package manager check for this project'],
+  ['progress output', 'Installing pnpm@12.8.1...'],
+]) {
+  test(`reads the listing when ${label} is printed ahead of it`, { skip: process.platform === 'win32' }, async t => {
+    const listing = JSON.stringify([{ dependencies: { node: { version: '24.9.0' } } }], null, 2)
+    const binDest = fakePnpm(t, `cat <<'JSON'\n${preamble}\n${listing}\nJSON`)
+    captureStdout(t)
+
+    const versions = await getInstalledRuntimeVersions(['node'], binDest)
+
+    assert.deepEqual([...versions], [['node', '24.9.0']])
+  })
+}
+
+test('keeps pnpm from switching versions or printing warnings while listing', { skip: process.platform === 'win32' }, async t => {
+  const listing = JSON.stringify([{ dependencies: { node: { version: '24.9.0' } } }])
+  const binDest = fakePnpm(t, `case "$*" in *--config.pm-on-fail=ignore*--reporter=silent*) cat <<'JSON'\n${listing}\nJSON\n;; *) exit 9;; esac`)
   captureStdout(t)
 
   const versions = await getInstalledRuntimeVersions(['node'], binDest)

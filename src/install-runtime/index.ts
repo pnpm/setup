@@ -94,8 +94,14 @@ export async function getInstalledRuntimeVersions(
   if (names.length === 0) return versions
 
   try {
-    const stdout = await runPnpmForOutput(binDest, ['list', '--global', '--json', '--depth', '0'])
-    const listing = JSON.parse(stdout) as Array<{
+    // `pm-on-fail=ignore` keeps pnpm from switching to the project's pinned
+    // version (which prints "Installing …"), and the silent reporter drops
+    // warnings such as the one `--global` prints when the project sets
+    // `pmOnFail`. Both would land on stdout ahead of the JSON.
+    const stdout = await runPnpmForOutput(binDest, [
+      '--config.pm-on-fail=ignore', '--reporter=silent', 'list', '--global', '--json', '--depth', '0',
+    ])
+    const listing = parseListing(stdout) as Array<{
       readonly dependencies?: Record<string, { readonly version?: string }>
     }>
     for (const name of names) {
@@ -110,6 +116,22 @@ export async function getInstalledRuntimeVersions(
     warning(`Unable to determine the installed runtime versions: ${err instanceof Error ? err.message : String(err)}`)
   }
   return versions
+}
+
+/**
+ * Whatever pnpm still prints ahead of the JSON is skipped: the listing is the
+ * text from the first line that starts with `[` and parses to the end. A
+ * `[WARN]` line also starts with `[`, so the first one is not taken on trust.
+ */
+function parseListing(stdout: string): unknown {
+  const lines = stdout.split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].startsWith('[')) continue
+    try {
+      return JSON.parse(lines.slice(i).join('\n'))
+    } catch {}
+  }
+  return JSON.parse(stdout)
 }
 
 /**
