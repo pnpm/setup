@@ -41,8 +41,9 @@ export async function fingerprintStore(storePath: string): Promise<string | unde
 
 async function hashIndex(indexPath: string, hash: Hash): Promise<boolean> {
   if (!await exists(indexPath)) return false
-  if (await hasPendingWrites(`${indexPath}-wal`)) return false
+  // Stamp first: a write landing after the WAL check then changes the stamp.
   const before = await stampIndex(indexPath)
+  if (await hasPendingWrites(`${indexPath}-wal`)) return false
   const url = pathToFileURL(indexPath)
   url.searchParams.set('immutable', '1')
   try {
