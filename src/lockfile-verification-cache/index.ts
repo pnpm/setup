@@ -27,7 +27,7 @@ const SNAPSHOT_STATE = 'lockfile_verification_cache_snapshot'
  */
 let target: { cacheFilePath: string, key: string } | undefined
 
-/** Whether this process already restored or saved the log. */
+/** Whether this process already restored the log or decided whether to save it. */
 let stored = false
 
 /**
@@ -101,7 +101,11 @@ export function snapshotVerificationLog(): void {
  * repository has allow-listed, and `expectedNewRecords` catches what they
  * append.
  *
- * Safe to call more than once; the second call is a no-op.
+ * Safe to call more than once; the first call that finds the log decides
+ * whether it is saved, and later calls are no-ops. The post step checks with
+ * no bound on what was added, so letting it retry would upload a log the main
+ * step rejected, and retrying a save that lost a race to another job only
+ * repeats the warning.
  */
 export async function saveVerificationCache(expectedNewRecords = Infinity): Promise<void> {
   if (stored || getState(STORED_STATE) === 'true') return
@@ -110,13 +114,13 @@ export async function saveVerificationCache(expectedNewRecords = Infinity): Prom
   const key = target?.key ?? getState(KEY_STATE)
   if (!cacheFilePath || !key || !existsSync(cacheFilePath)) return
 
+  stored = true
+  saveState(STORED_STATE, 'true')
   if (!onlyGrewAsExpected(cacheFilePath, expectedNewRecords)) return
 
   try {
     const cacheId = await saveCache([cacheFilePath], key)
     if (cacheId === -1) return
-    stored = true
-    saveState(STORED_STATE, 'true')
     info(`Lockfile verification cache saved with the key: ${key}`)
   } catch (error) {
     warning(`Failed to save the lockfile verification cache: ${(error as Error).message}`)
