@@ -196,10 +196,8 @@ async function getPnpmCacheDirectory(): Promise<string> {
     silent: true,
     ignoreReturnCode: true,
   })
-  const configured = stdout.trim()
-  if (configured && configured !== 'undefined') {
-    return removeWindowsExtendedPathPrefix(configured)
-  }
+  const configured = reportedPath(stdout)
+  if (configured) return removeWindowsExtendedPathPrefix(configured)
   return defaultPnpmCacheDirectory()
 }
 
@@ -209,7 +207,18 @@ async function runPnpmCachePath(): Promise<string | undefined> {
     ignoreReturnCode: true,
   })
   if (exitCode !== 0) return undefined
-  return stdout.trim() || undefined
+  return reportedPath(stdout)
+}
+
+/**
+ * pnpm can print more than the path: a `devEngines` warning goes to stdout
+ * ahead of it, and releases without `pnpm cache path` print the usage text of
+ * `pnpm cache` and exit with 0. Only an absolute path on the last line counts,
+ * which also rules out the `undefined` printed for an unset `cacheDir`.
+ */
+function reportedPath(stdout: string): string | undefined {
+  const lastLine = stdout.trim().split(/\r?\n/).at(-1)?.trim()
+  return lastLine && path.isAbsolute(lastLine) ? lastLine : undefined
 }
 
 /** Mirrors pnpm's own `cacheDir` default, for releases that cannot report it. */

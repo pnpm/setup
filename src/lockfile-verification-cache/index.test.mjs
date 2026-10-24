@@ -25,7 +25,9 @@ const { outputFiles } = await build({
           export const getState = name => globalThis.fixture.state.get(name) ?? ''
           export const saveState = (name, value) => { globalThis.fixture.state.set(name, String(value)) }
         ` : `
-          export async function getExecOutput() { return { exitCode: 0, stdout: globalThis.fixture.cacheDir } }
+          export async function getExecOutput(command) {
+            return globalThis.fixture.exec?.(command) ?? { exitCode: 0, stdout: globalThis.fixture.cacheDir }
+          }
         `,
       }))
     },
@@ -97,4 +99,40 @@ test('the post step saves the log when the job installs in a step of its own', a
   appendFileSync(log, 'a\n')
   await loadStep().saveVerificationCache()
   assert.equal(fixture.saves, 1)
+})
+
+const restoredPath = fixture => fixture.state.get('lockfile_verification_cache_path')
+
+test('a warning printed ahead of the cache path is not part of the path', async t => {
+  const { fixture, log } = setup(t, () => 1)
+  fixture.exec = () => ({
+    exitCode: 0,
+    stdout: `[WARN] This project requires Node.js 26.10.0. Your current Node.js is v24.18.0\n${fixture.cacheDir}\n`,
+  })
+  await loadStep().restoreVerificationCache('hash')
+  assert.equal(restoredPath(fixture), log)
+})
+
+test('usage text from a pnpm without `cache path` falls back to the configured directory', async t => {
+  const { fixture, log } = setup(t, () => 1)
+  fixture.exec = command => command === 'pnpm cache path'
+    ? { exitCode: 0, stdout: 'Usage: pnpm cache <command>\n\nInspect and manage the metadata cache\n' }
+    : { exitCode: 0, stdout: `[WARN] some warning\n${fixture.cacheDir}\n` }
+  await loadStep().restoreVerificationCache('hash')
+  assert.equal(restoredPath(fixture), log)
+})
+
+test('an unset cacheDir falls back to the default directory', async t => {
+  const { fixture } = setup(t, () => 1)
+  const previous = process.env.XDG_CACHE_HOME
+  t.after(() => {
+    if (previous === undefined) delete process.env.XDG_CACHE_HOME
+    else process.env.XDG_CACHE_HOME = previous
+  })
+  process.env.XDG_CACHE_HOME = fixture.cacheDir
+  fixture.exec = command => command === 'pnpm cache path'
+    ? { exitCode: 1, stdout: '' }
+    : { exitCode: 0, stdout: 'undefined\n' }
+  await loadStep().restoreVerificationCache('hash')
+  assert.equal(restoredPath(fixture), path.join(fixture.cacheDir, 'pnpm', 'lockfile-verified.jsonl'))
 })
