@@ -84,3 +84,17 @@ test('matches connection-level error codes and cause chains', () => {
   assert.equal(isTransientNetworkError('a plain string'), false)
   assert.equal(isTransientNetworkError(null), false)
 })
+test('does not retry an unknown-version error containing a 5xx-looking version', () => {
+  assert.equal(isTransientNetworkError(new Error('No pnpm version matches "5.500.0".')), false)
+  assert.equal(isTransientNetworkError(new Error('The requested pnpm version "4.429.0" is not known.')), false)
+})
+
+test('retries a "Request timeout" message', () => {
+  assert.equal(isTransientNetworkError(new Error('Request timeout')), true)
+})
+
+test('still retries genuine HTTP 429 and 5xx messages', () => {
+  assert.equal(isTransientNetworkError(new Error('HTTP 500 Internal Server Error')), true)
+  assert.equal(isTransientNetworkError(new Error('502 Bad Gateway')), true)
+  assert.equal(isTransientNetworkError(new Error('HTTP 429 Too Many Requests')), true)
+})
