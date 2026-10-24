@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+
 import { build } from 'esbuild'
 
 const { outputFiles } = await build({
@@ -16,7 +17,7 @@ const { outputFiles } = await build({
 })
 const bundledModule = { exports: {} }
 new Function('require', 'module', 'exports', outputFiles[0].text)(
-  createRequire(import.meta.url), bundledModule, bundledModule.exports,
+  createRequire(import.meta.url), bundledModule, bundledModule.exports
 )
 const { resolveRuntimeRequests } = bundledModule.exports
 
@@ -98,11 +99,11 @@ const scenarios = [
 ]
 
 for (const scenario of scenarios) {
-  test(scenario.name, t => {
+  test(scenario.name, testContext => {
     const workspace = mkdtempSync(path.join(tmpdir(), 'pnpm-runtime-requests-'))
     const previous = process.env.GITHUB_WORKSPACE
     process.env.GITHUB_WORKSPACE = workspace
-    t.after(() => {
+    testContext.after(() => {
       if (previous === undefined) delete process.env.GITHUB_WORKSPACE
       else process.env.GITHUB_WORKSPACE = previous
       rmSync(workspace, { recursive: true, force: true })

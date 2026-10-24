@@ -1,12 +1,13 @@
-import { existsSync, readFileSync, realpathSync } from 'fs'
-import path from 'path'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import path from 'node:path'
+
 import { parse } from 'yaml'
 
 /**
  * Included workspace members inherit the root's package-manager declaration.
  * Excluded projects and paths outside the checkout retain their own manifest.
  */
-export function packageManagerManifest(manifest: string, checkout: string): string {
+export function packageManagerManifest (manifest: string, checkout: string): string {
   if (!existsSync(manifest)) return manifest
   const boundary = realpathSync(checkout)
   let project: string
@@ -30,7 +31,7 @@ export function packageManagerManifest(manifest: string, checkout: string): stri
       const relative = path.relative(directory, project).split(path.sep).join('/')
       const matches = (pattern: string) => path.matchesGlob(
         `${relative}/package.json`,
-        `${pattern.replace(/^\.\//, '').replace(/\/$/, '')}/package.json`,
+        `${pattern.replace(/^\.\//, '').replace(/\/$/, '')}/package.json`
       )
       const excluded = relative.split('/').some(part => part === 'node_modules' || part === 'bower_components')
         || patterns.some(pattern => pattern.startsWith('!') && matches(pattern.slice(1)))
@@ -48,13 +49,13 @@ export function packageManagerManifest(manifest: string, checkout: string): stri
   }
 }
 
-function inside(parent: string, directory: string): boolean {
+function inside (parent: string, directory: string): boolean {
   const relative = path.relative(parent, directory)
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
 }
 
 /** The inherited manifest and the dependency lockfile can belong to different directories. */
-export function packageManagerLockfileDirectory(manifest: string, selectedManifest: string): string {
+export function packageManagerLockfileDirectory (manifest: string, selectedManifest: string): string {
   const project = path.dirname(manifest)
   const root = path.dirname(selectedManifest)
   if (project === root) return project

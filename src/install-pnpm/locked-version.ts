@@ -1,14 +1,15 @@
-import { closeSync, openSync, readSync } from 'fs'
-import path from 'path'
+import { closeSync, openSync, readSync } from 'node:fs'
+import path from 'node:path'
+import { StringDecoder } from 'node:string_decoder'
+
 import semver from 'semver'
-import { StringDecoder } from 'string_decoder'
 import { parseDocument } from 'yaml'
 
 /**
  * Reuse a compatible package-manager pin from the lockfile's environment
  * document. Exact versions and registry tags bypass lockfile selection.
  */
-export function readLockedPnpmVersion(directory: string, spec: string): string | undefined {
+export function readLockedPnpmVersion (directory: string, spec: string): string | undefined {
   // Exact pins already identify the binary; tags need registry resolution.
   if (semver.valid(spec) || !semver.validRange(spec)) return undefined
 
@@ -33,7 +34,7 @@ export function readLockedPnpmVersion(directory: string, spec: string): string |
   return undefined
 }
 
-function readEnvDocument(filename: string): string | undefined {
+function readEnvDocument (filename: string): string | undefined {
   const fd = openSync(filename, 'r')
   try {
     const buffer = Buffer.allocUnsafe(64 * 1024)
@@ -70,7 +71,7 @@ function readEnvDocument(filename: string): string | undefined {
  * lockfile. Slicing it out the way pnpm's `extractEnvDocument` does avoids
  * parsing the dependency document, which runs to megabytes in a monorepo.
  */
-function extractEnvDocument(content: string): string | undefined {
+function extractEnvDocument (content: string): string | undefined {
   content = content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
   if (!content.startsWith('---\n')) return undefined
   const end = content.indexOf('\n---\n', 4)

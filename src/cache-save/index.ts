@@ -1,8 +1,9 @@
 import { setFailed } from '@actions/core'
-import { Inputs } from '../inputs'
-import { runSaveCache } from './run'
 
-export async function saveCache(inputs: Inputs) {
+import { Inputs } from '../inputs/index.js'
+import { runSaveCache } from './run.js'
+
+export async function saveCache (inputs: Inputs): Promise<void> {
   if (!inputs.cache || !inputs.saveCache) return
 
   try {
@@ -11,5 +12,3 @@ export async function saveCache(inputs: Inputs) {
     setFailed((error as Error).message)
   }
 }
-
-export default saveCache

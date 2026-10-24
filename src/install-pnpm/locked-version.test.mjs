@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import { syncBuiltinESMExports } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
-import { syncBuiltinESMExports } from 'node:module'
 import { afterEach, test } from 'node:test'
+
 import { readLockedPnpmVersion } from './locked-version.ts'
 
 const directories = []
@@ -11,7 +12,7 @@ afterEach(() => {
   for (const directory of directories.splice(0)) fs.rmSync(directory, { recursive: true, force: true })
 })
 
-function fixture(specifier = '>=12.0.0 <13.0.0', version = '12.8.1') {
+function fixture (specifier = '>=12.0.0 <13.0.0', version = '12.8.1') {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-locked-pnpm-'))
   directories.push(directory)
   fs.writeFileSync(path.join(directory, 'pnpm-lock.yaml'), `---
@@ -121,13 +122,15 @@ test('preserves UTF-8 split across reads and env-only closing separators', () =>
   assert.throws(() => readLockedPnpmVersion(directory, '12'))
 })
 
-test('handles short reads without changing document-start or boundary semantics', t => {
+test('handles short reads without changing document-start or boundary semantics', testContext => {
   const originalRead = fs.readSync
   let limit = 1
-  t.mock.method(fs, 'readSync', (fd, buffer, offset, length, position) =>
+  testContext.mock.method(fs, 'readSync', (fd, buffer, offset, length, position) =>
     originalRead(fd, buffer, offset, Math.min(length, limit), position))
   syncBuiltinESMExports()
-  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports() })
+  testContext.after(() => {
+    testContext.mock.restoreAll(); syncBuiltinESMExports()
+  })
   const directory = fixture()
   const lockfile = path.join(directory, 'pnpm-lock.yaml')
   const valid = fs.readFileSync(lockfile, 'utf8')
@@ -143,18 +146,22 @@ test('handles short reads without changing document-start or boundary semantics'
   }
 })
 
-test('bounds reads for dependency documents and closes the file after read errors', t => {
+test('bounds reads for dependency documents and closes the file after read errors', testContext => {
   const originalRead = fs.readSync, originalClose = fs.closeSync
   let bytes = 0, closed = 0, failure
-  t.mock.method(fs, 'readSync', (...args) => {
+  testContext.mock.method(fs, 'readSync', (...args) => {
     if (failure) throw failure
     const count = originalRead(...args)
     bytes += count
     return count
   })
-  t.mock.method(fs, 'closeSync', fd => { closed++; return originalClose(fd) })
+  testContext.mock.method(fs, 'closeSync', fd => {
+    closed++; return originalClose(fd)
+  })
   syncBuiltinESMExports()
-  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports() })
+  testContext.after(() => {
+    testContext.mock.restoreAll(); syncBuiltinESMExports()
+  })
   const directory = fixture()
   const lockfile = path.join(directory, 'pnpm-lock.yaml')
   fs.appendFileSync(lockfile, '# ' + 'x'.repeat(1024 * 1024))

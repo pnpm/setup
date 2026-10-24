@@ -1,10 +1,11 @@
 import { saveCache } from '@actions/cache'
 import { getState, info } from '@actions/core'
-import { Inputs } from '../inputs'
-import pruneStore from '../pnpm-store-prune'
-import { fingerprintStore, statStore } from '../store-fingerprint'
 
-export async function runSaveCache(inputs: Inputs) {
+import { Inputs } from '../inputs/index.js'
+import { pruneStore } from '../pnpm-store-prune/index.js'
+import { fingerprintStore, statStore } from '../store-fingerprint/index.js'
+
+export async function runSaveCache (inputs: Inputs): Promise<void> {
   const primaryKey = getState('cache_primary_key')
   const cachePath = getState('cache_path')
 

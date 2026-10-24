@@ -1,11 +1,13 @@
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
 import { restoreCache, saveCache } from '@actions/cache'
 import { debug, getState, info, saveState, warning } from '@actions/core'
 import { getExecOutput } from '@actions/exec'
-import { createHash } from 'crypto'
-import { existsSync, readFileSync } from 'fs'
-import os from 'os'
-import path from 'path'
-import { removeWindowsExtendedPathPrefix } from '../windows-path'
+
+import { removeWindowsExtendedPathPrefix } from '../windows-path/index.js'
 
 /**
  * Where pnpm v11+ memoizes which lockfile passed which supply-chain policies.
@@ -49,7 +51,7 @@ let snapshotBeforeInstall: LogSnapshot | undefined
  * for, so this cache is keyed on the same lockfile hash as the store cache
  * but restored without prefix fallback: an older entry could never be used.
  */
-export async function restoreVerificationCache(lockfileHash: string): Promise<void> {
+export async function restoreVerificationCache (lockfileHash: string): Promise<void> {
   try {
     const cacheFilePath = path.join(await getPnpmCacheDirectory(), VERIFICATION_CACHE_FILE)
     const key = `pnpm-lockfile-verified-${process.env.RUNNER_OS}-${os.arch()}-${lockfileHash}`
@@ -81,7 +83,7 @@ export async function restoreVerificationCache(lockfileHash: string): Promise<vo
  * cold cache the log does not exist yet at restore time, which would waive the
  * check for exactly the runs that go on to publish a new entry.
  */
-export function snapshotVerificationLog(): void {
+export function snapshotVerificationLog (): void {
   const cacheFilePath = target?.cacheFilePath ?? getState(PATH_STATE)
   if (!cacheFilePath) return
 
@@ -107,7 +109,7 @@ export function snapshotVerificationLog(): void {
  * step rejected, and retrying a save that lost a race to another job only
  * repeats the warning.
  */
-export async function saveVerificationCache(expectedNewRecords = Infinity): Promise<void> {
+export async function saveVerificationCache (expectedNewRecords = Infinity): Promise<void> {
   if (stored || getState(STORED_STATE) === 'true') return
 
   const cacheFilePath = target?.cacheFilePath ?? getState(PATH_STATE)
@@ -134,7 +136,7 @@ export async function saveVerificationCache(expectedNewRecords = Infinity): Prom
  * uploading it would hand that to every later job. pnpm compacting the log
  * (past a thousand records) lands here too, at the cost of one re-verification.
  */
-function onlyGrewAsExpected(cacheFilePath: string, expectedNewRecords: number): boolean {
+function onlyGrewAsExpected (cacheFilePath: string, expectedNewRecords: number): boolean {
   const before = snapshotBeforeInstall ?? readSnapshotState()
   if (before === undefined) return true
 
@@ -159,7 +161,7 @@ function onlyGrewAsExpected(cacheFilePath: string, expectedNewRecords: number): 
   return true
 }
 
-function readSnapshotState(): LogSnapshot | undefined {
+function readSnapshotState (): LogSnapshot | undefined {
   const raw = getState(SNAPSHOT_STATE)
   if (!raw) return undefined
   try {
@@ -169,11 +171,11 @@ function readSnapshotState(): LogSnapshot | undefined {
   }
 }
 
-function digestRecords(records: readonly string[]): string {
+function digestRecords (records: readonly string[]): string {
   return createHash('sha256').update(records.join('\n')).digest('hex')
 }
 
-function readRecords(cacheFilePath: string): string[] | undefined {
+function readRecords (cacheFilePath: string): string[] | undefined {
   try {
     return readFileSync(cacheFilePath, 'utf8').split('\n').filter(Boolean)
   } catch {
@@ -188,7 +190,7 @@ function readRecords(cacheFilePath: string): string[] | undefined {
  * stand in for it: that reports settings, not defaults, and prints `undefined`
  * for an unset `cacheDir`.
  */
-async function getPnpmCacheDirectory(): Promise<string> {
+async function getPnpmCacheDirectory (): Promise<string> {
   const reported = await runPnpmCachePath()
   if (reported) return removeWindowsExtendedPathPrefix(reported)
 
@@ -201,7 +203,7 @@ async function getPnpmCacheDirectory(): Promise<string> {
   return defaultPnpmCacheDirectory()
 }
 
-async function runPnpmCachePath(): Promise<string | undefined> {
+async function runPnpmCachePath (): Promise<string | undefined> {
   const { exitCode, stdout } = await getExecOutput('pnpm cache path', undefined, {
     silent: true,
     ignoreReturnCode: true,
@@ -216,23 +218,23 @@ async function runPnpmCachePath(): Promise<string | undefined> {
  * `pnpm cache` and exit with 0. Only an absolute path on the last line counts,
  * which also rules out the `undefined` printed for an unset `cacheDir`.
  */
-function reportedPath(stdout: string): string | undefined {
+function reportedPath (stdout: string): string | undefined {
   const lastLine = stdout.trim().split(/\r?\n/).at(-1)?.trim()
   return lastLine && path.isAbsolute(lastLine) ? lastLine : undefined
 }
 
 /** Mirrors pnpm's own `cacheDir` default, for releases that cannot report it. */
-function defaultPnpmCacheDirectory(): string {
+function defaultPnpmCacheDirectory (): string {
   const { XDG_CACHE_HOME, LOCALAPPDATA } = process.env
   if (XDG_CACHE_HOME) return path.join(XDG_CACHE_HOME, 'pnpm')
 
   const homeDir = os.homedir()
   switch (process.platform) {
-  case 'darwin':
-    return path.join(homeDir, 'Library', 'Caches', 'pnpm')
-  case 'win32':
-    return LOCALAPPDATA ? path.join(LOCALAPPDATA, 'pnpm-cache') : path.join(homeDir, '.pnpm-cache')
-  default:
-    return path.join(homeDir, '.cache', 'pnpm')
+    case 'darwin':
+      return path.join(homeDir, 'Library', 'Caches', 'pnpm')
+    case 'win32':
+      return LOCALAPPDATA ? path.join(LOCALAPPDATA, 'pnpm-cache') : path.join(homeDir, '.pnpm-cache')
+    default:
+      return path.join(homeDir, '.cache', 'pnpm')
   }
 }

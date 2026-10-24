@@ -1,8 +1,10 @@
+import { existsSync } from 'node:fs'
+import path from 'node:path'
+
 import { getBooleanInput, getInput, InputOptions } from '@actions/core'
 import expandTilde from 'expand-tilde'
-import { existsSync } from 'fs'
-import path from 'path'
-import { resolveRegistry } from '../install-pnpm/registry'
+
+import { resolveRegistry } from '../install-pnpm/registry.js'
 
 export type RuntimeName = 'node' | 'bun' | 'deno'
 
@@ -37,7 +39,7 @@ const options: InputOptions = {
   required: true,
 }
 
-function parseRuntime(): RuntimeInput | undefined {
+function parseRuntime (): RuntimeInput | undefined {
   const raw = getInput('runtime').trim()
   if (!raw) return undefined
 
@@ -47,7 +49,7 @@ function parseRuntime(): RuntimeInput | undefined {
 
   if (!isSupportedRuntime(name)) {
     throw new Error(
-      `Invalid \`runtime\` input "${raw}". Expected \`<name>\` or \`<name>@<version>\` where name is one of: ${SUPPORTED_RUNTIMES.join(', ')}.`,
+      `Invalid \`runtime\` input "${raw}". Expected \`<name>\` or \`<name>@<version>\` where name is one of: ${SUPPORTED_RUNTIMES.join(', ')}.`
     )
   }
   if (version !== undefined && version === '') {
@@ -66,7 +68,7 @@ const MANIFEST_NAMES = ['package.json', 'package.yaml'] as const
  * `pnpm install` — running it at the repository root installs nothing at all
  * when the project lives one level down.
  */
-function resolveProjectPaths(): {
+function resolveProjectPaths (): {
   workingDirectory: string
   packageJsonFile: string
 } {
@@ -77,7 +79,7 @@ function resolveProjectPaths(): {
     throw new Error(
       'Both `working-directory` and the deprecated `package-json-file` are set. ' +
       'Remove `package-json-file`: `working-directory` already covers where the manifest ' +
-      'is read from and where `pnpm install` runs.',
+      'is read from and where `pnpm install` runs.'
     )
   }
 
@@ -99,7 +101,7 @@ function resolveProjectPaths(): {
  * naming the file the action has to look. Falls back to `package.json` so the
  * "no manifest" path still reports the name a user expects.
  */
-function findManifest(workingDirectory: string): string {
+function findManifest (workingDirectory: string): string {
   const { GITHUB_WORKSPACE } = process.env
   if (GITHUB_WORKSPACE) {
     for (const name of MANIFEST_NAMES) {
@@ -110,7 +112,7 @@ function findManifest(workingDirectory: string): string {
   return path.join(workingDirectory, MANIFEST_NAMES[0])
 }
 
-function isSupportedRuntime(name: string): name is RuntimeName {
+function isSupportedRuntime (name: string): name is RuntimeName {
   return (SUPPORTED_RUNTIMES as readonly string[]).includes(name)
 }
 
@@ -132,9 +134,7 @@ export const getInputs = (): Inputs => {
   }
 }
 
-function parseNodeVersionFileInput(): string | false | undefined {
+function parseNodeVersionFileInput (): string | false | undefined {
   const value = getInput('node-version-file').trim()
   return value === 'false' ? false : value || undefined
 }
-
-export default getInputs

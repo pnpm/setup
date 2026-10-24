@@ -1,17 +1,19 @@
+import { randomUUID } from 'node:crypto'
+import os from 'node:os'
+import path from 'node:path'
+
 import { restoreCache } from '@actions/cache'
 import { debug, info, saveState, setOutput } from '@actions/core'
 import { getExecOutput } from '@actions/exec'
 import { hashFiles } from '@actions/glob'
-import { randomUUID } from 'crypto'
-import os from 'os'
-import path from 'path'
-import { Inputs } from '../inputs'
-import { RuntimeRequest } from '../install-runtime'
-import { restoreVerificationCache } from '../lockfile-verification-cache'
-import { lockfileDir } from '../pnpm-install/lockfile'
-import { fingerprintStore, statStore } from '../store-fingerprint'
-import { removeWindowsExtendedPathPrefix } from '../windows-path'
-import { getCacheKeyPrefix, getRestoreKeys, getSaveCacheKey, getSaveCacheKeyPrefix, isLockfileExactHit } from './keys'
+
+import { Inputs } from '../inputs/index.js'
+import { RuntimeRequest } from '../install-runtime/index.js'
+import { restoreVerificationCache } from '../lockfile-verification-cache/index.js'
+import { lockfileDir } from '../pnpm-install/lockfile.js'
+import { fingerprintStore, statStore } from '../store-fingerprint/index.js'
+import { removeWindowsExtendedPathPrefix } from '../windows-path/index.js'
+import { getCacheKeyPrefix, getRestoreKeys, getSaveCacheKey, getSaveCacheKeyPrefix, isLockfileExactHit } from './keys.js'
 
 export interface RestoredCache {
   readonly lockfileKeyPrefix: string
@@ -19,9 +21,9 @@ export interface RestoredCache {
   readonly cachePath: string
 }
 
-export async function runRestoreCache(
+export async function runRestoreCache (
   inputs: Inputs,
-  runtimes: readonly RuntimeRequest[],
+  runtimes: readonly RuntimeRequest[]
 ): Promise<RestoredCache | undefined> {
   const fileHash = await hashFiles(resolveCacheDependencyPath(inputs))
   if (!fileHash) {
@@ -48,7 +50,7 @@ export async function runRestoreCache(
  * Ask the installed pnpm which lockfile it uses, including workspace membership
  * and per-project configuration. Explicit paths retain checkout-relative semantics.
  */
-export function resolveCacheDependencyPath(inputs: Inputs): string {
+export function resolveCacheDependencyPath (inputs: Inputs): string {
   if (inputs.cacheDependencyPath) return inputs.cacheDependencyPath
   const checkout = process.env.GITHUB_WORKSPACE ?? process.cwd()
   const project = path.resolve(checkout, inputs.workingDirectory)
@@ -56,9 +58,9 @@ export function resolveCacheDependencyPath(inputs: Inputs): string {
   return path.relative(checkout, path.join(lockfileDir(project, pnpmBin), 'pnpm-lock.yaml'))
 }
 
-async function runRestoreStoreCache(
+async function runRestoreStoreCache (
   fileHash: string,
-  runtimes: readonly RuntimeRequest[],
+  runtimes: readonly RuntimeRequest[]
 ): Promise<RestoredCache> {
   const cachePath = await getCacheDirectory()
   saveState('cache_path', cachePath)
@@ -70,7 +72,7 @@ async function runRestoreStoreCache(
   const restoredKey = await restoreCache([cachePath], lockfileKeyPrefix, restoreKeys)
 
   if (!restoredKey) {
-    info(`Cache is not found`)
+    info('Cache is not found')
     return { lockfileKeyPrefix, restoredKey: undefined, cachePath }
   }
 
@@ -78,7 +80,7 @@ async function runRestoreStoreCache(
   return { lockfileKeyPrefix, restoredKey, cachePath }
 }
 
-export function finalizeCache(cache: RestoredCache, resolvedRuntimes: readonly RuntimeRequest[]) {
+export function finalizeCache (cache: RestoredCache, resolvedRuntimes: readonly RuntimeRequest[]): void {
   const runId = process.env.GITHUB_RUN_ID ?? ''
   const runAttempt = process.env.GITHUB_RUN_ATTEMPT ?? ''
   const invocationId = `${runId}-${runAttempt}-${randomUUID()}`
@@ -90,10 +92,10 @@ export function finalizeCache(cache: RestoredCache, resolvedRuntimes: readonly R
 }
 
 /** Must run before the install. */
-export async function fingerprintRestoredStore(
+export async function fingerprintRestoredStore (
   cache: RestoredCache,
-  resolvedRuntimes: readonly RuntimeRequest[],
-) {
+  resolvedRuntimes: readonly RuntimeRequest[]
+): Promise<void> {
   const saveKeyPrefix = getSaveCacheKeyPrefix(cache.lockfileKeyPrefix, resolvedRuntimes)
   if (!cache.restoredKey?.startsWith(saveKeyPrefix)) return
 
@@ -103,7 +105,7 @@ export async function fingerprintRestoredStore(
   if (fingerprint) saveState('cache_store_fingerprint', fingerprint)
 }
 
-async function getCacheDirectory() {
+async function getCacheDirectory () {
   const { stdout } = await getExecOutput('pnpm store path')
   const cacheFolderPath = removeWindowsExtendedPathPrefix(stdout.trim())
   debug(`Cache folder is set to "${cacheFolderPath}"`)

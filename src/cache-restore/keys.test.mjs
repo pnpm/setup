@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+
 import { getCacheKeyPrefix, getRestoreKeys, getSaveCacheKey, isLockfileExactHit } from './keys.ts'
 
 test('moving runtime selectors produce distinct key prefixes', () => {
@@ -85,7 +86,7 @@ test('a version change in any runtime changes the save key', () => {
       { name: 'node', version: '24.19.0' },
       { name: 'bun', version: '1.3.13' },
     ],
-    '123',
+    '123'
   )
   const after = getSaveCacheKey(
     lockfileKeyPrefix,
@@ -93,7 +94,7 @@ test('a version change in any runtime changes the save key', () => {
       { name: 'node', version: '24.19.0' },
       { name: 'bun', version: '1.3.14' },
     ],
-    '123',
+    '123'
   )
 
   assert.notEqual(before, after)

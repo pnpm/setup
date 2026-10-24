@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+
 import { DEFAULT_REGISTRY, resolveRegistry } from './registry.ts'
 
 test('defaults to the npm registry', () => {
@@ -7,11 +8,11 @@ test('defaults to the npm registry', () => {
   assert.equal(resolveRegistry('  '), DEFAULT_REGISTRY)
 })
 
-test('ignores registry environment variables', t => {
+test('ignores registry environment variables', testContext => {
   for (const name of ['pnpm_config_registry', 'npm_config_registry']) {
     const previous = process.env[name]
     process.env[name] = 'https://env.example.com/'
-    t.after(() => {
+    testContext.after(() => {
       if (previous === undefined) delete process.env[name]
       else process.env[name] = previous
     })
@@ -33,7 +34,7 @@ test('rejects anything but an absolute http(s) URL', () => {
 test('rejects credentials without echoing them', () => {
   assert.throws(
     () => resolveRegistry('https://user:s3cret@mirror.example.com/'),
-    error => /must not contain credentials/.test(error.message) && !error.message.includes('s3cret'),
+    error => /must not contain credentials/.test(error.message) && !error.message.includes('s3cret')
   )
 })
 
@@ -41,7 +42,7 @@ test('rejects a query or fragment without echoing it', () => {
   for (const registry of ['https://mirror.example.com/npm?token=s3cret', 'https://mirror.example.com/npm#s3cret']) {
     assert.throws(
       () => resolveRegistry(registry),
-      error => /must not contain a query string or fragment/.test(error.message) && !error.message.includes('s3cret'),
+      error => /must not contain a query string or fragment/.test(error.message) && !error.message.includes('s3cret')
     )
   }
 })

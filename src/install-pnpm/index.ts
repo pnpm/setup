@@ -1,10 +1,11 @@
 import { endGroup, startGroup } from '@actions/core'
-import { Inputs } from '../inputs'
-import runSelfInstaller, { SelfInstallerResult } from './run'
+
+import { Inputs } from '../inputs/index.js'
+import { runSelfInstaller, SelfInstallerResult } from './run.js'
 
 export { runSelfInstaller }
 
-export async function install(inputs: Inputs): Promise<SelfInstallerResult> {
+export async function install (inputs: Inputs): Promise<SelfInstallerResult> {
   startGroup('Installing pnpm...')
   try {
     return await runSelfInstaller(inputs)
@@ -12,5 +13,3 @@ export async function install(inputs: Inputs): Promise<SelfInstallerResult> {
     endGroup()
   }
 }
-
-export default install

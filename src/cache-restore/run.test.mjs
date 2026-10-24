@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import os from 'node:os'
-import { fileURLToPath } from 'node:url'
 import { beforeEach, test } from 'node:test'
+import { fileURLToPath } from 'node:url'
+
 import { build } from 'esbuild'
+
 import { getCacheKeyPrefix, getSaveCacheKey } from './keys.ts'
 
 const mocks = {
@@ -22,14 +24,13 @@ const mocks = {
     export const setFailed = () => {}
   `,
   '@actions/exec': String.raw`export const getExecOutput = async () => ({ stdout: '/pnpm-store\n' })`,
-  '@actions/glob': `import { mock } from 'node:test'; export const hashFiles = mock.fn(async () => 'lockfile-hash')`,
-  '../lockfile-verification-cache': `import { mock } from 'node:test'; export const restoreVerificationCache = mock.fn(async () => {})`,
-  '../pnpm-store-prune': `
+  '@actions/glob': 'import { mock } from \'node:test\'; export const hashFiles = mock.fn(async () => \'lockfile-hash\')',
+  '../lockfile-verification-cache/index.js': 'import { mock } from \'node:test\'; export const restoreVerificationCache = mock.fn(async () => {})',
+  '../pnpm-store-prune/index.js': `
     import { mock } from 'node:test'
     export const pruneStore = mock.fn(async () => {})
-    export default pruneStore
   `,
-  '../store-fingerprint': `
+  '../store-fingerprint/index.js': `
     import { mock } from 'node:test'
     export const fingerprintStore = mock.fn(async () => 'restored-store')
     let calls = 0
@@ -44,10 +45,10 @@ const bundle = await build({
       export { saveCache } from '../cache-save/index.ts'
       export * as cache from '@actions/cache'
       export * as core from '@actions/core'
-      export * as prune from '../pnpm-store-prune'
-      export * as fingerprint from '../store-fingerprint'
+      export * as prune from '../pnpm-store-prune/index.js'
+      export * as fingerprint from '../store-fingerprint/index.js'
       export * as glob from '@actions/glob'
-      export * as verification from '../lockfile-verification-cache'
+      export * as verification from '../lockfile-verification-cache/index.js'
     `,
     resolveDir: fileURLToPath(new URL('.', import.meta.url)),
   },
@@ -57,7 +58,7 @@ const bundle = await build({
   write: false,
   plugins: [{
     name: 'fake-cache-services',
-    setup(builder) {
+    setup (builder) {
       builder.onResolve({ filter: /.*/ }, args => {
         if (Object.hasOwn(mocks, args.path)) return { path: args.path, namespace: 'mock' }
       })
@@ -132,7 +133,7 @@ test('a failure before finalization does not save the restored store', async () 
 
 const sameRuntimeKey = getSaveCacheKey(lockfileKeyPrefix, runtimes, 'previous-invocation')
 
-async function restoreBeforeInstall(installedRuntimes = runtimes) {
+async function restoreBeforeInstall (installedRuntimes = runtimes) {
   const restored = await runRestoreCache(inputs, runtimes)
   finalizeCache(restored, installedRuntimes)
   await fingerprintRestoredStore(restored, installedRuntimes)
@@ -149,8 +150,12 @@ test('an unchanged store restored for the same lockfile and runtimes is not save
 
 test('the store is stat-ed before it is fingerprinted', async () => {
   const calls = []
-  fingerprint.statStore.mock.mockImplementation(async () => { calls.push('stat'); return 'restored-stat' })
-  fingerprint.fingerprintStore.mock.mockImplementation(async () => { calls.push('fingerprint'); return 'restored-store' })
+  fingerprint.statStore.mock.mockImplementation(async () => {
+    calls.push('stat'); return 'restored-stat'
+  })
+  fingerprint.fingerprintStore.mock.mockImplementation(async () => {
+    calls.push('fingerprint'); return 'restored-store'
+  })
   cache.restoreCache.mock.mockImplementation(async () => sameRuntimeKey)
   await restoreBeforeInstall()
 
@@ -171,7 +176,9 @@ test('a store that only differs from the restored one before pruning is not save
   cache.restoreCache.mock.mockImplementation(async () => sameRuntimeKey)
   await restoreBeforeInstall()
   let pruned = false
-  prune.pruneStore.mock.mockImplementation(async () => { pruned = true })
+  prune.pruneStore.mock.mockImplementation(async () => {
+    pruned = true
+  })
   fingerprint.fingerprintStore.mock.mockImplementation(async () => pruned ? 'restored-store' : 'changed-store')
   await runSaveCache(inputs)
 
@@ -208,9 +215,9 @@ test('save-cache false restores the store without saving it', async () => {
   assert.equal(cache.saveCache.mock.callCount(), 0)
 })
 
-test('equivalent invocations in one workflow attempt publish distinct save keys', async t => {
+test('equivalent invocations in one workflow attempt publish distinct save keys', async testContext => {
   const previous = [process.env.GITHUB_RUN_ID, process.env.GITHUB_RUN_ATTEMPT]
-  t.after(() => {
+  testContext.after(() => {
     for (const [index, name] of ['GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'].entries()) {
       if (previous[index] === undefined) delete process.env[name]
       else process.env[name] = previous[index]
@@ -220,9 +227,11 @@ test('equivalent invocations in one workflow attempt publish distinct save keys'
   process.env.GITHUB_RUN_ATTEMPT = '1'
 
   for (let invocation = 0; invocation < 2; invocation++) {
+    /* eslint-disable no-await-in-loop -- each invocation restores what the previous one saved */
     const restored = await runRestoreCache(inputs, runtimes)
     finalizeCache(restored, runtimes)
     await runSaveCache(inputs)
+    /* eslint-enable no-await-in-loop */
   }
   const keys = cache.saveCache.mock.calls.map(call => call.arguments[1])
   assert.equal(keys.length, 2)

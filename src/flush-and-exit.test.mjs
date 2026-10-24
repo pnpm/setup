@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+
 import { build } from 'esbuild'
 
 const { outputFiles } = await build({
@@ -19,9 +20,9 @@ const CHUNK = 'a'.repeat(400_000)
 
 // A pipe holds 64 KiB, so a child writing more than that only keeps its tail
 // when the exit waits for the drain.
-function runChild(t, source) {
+function runChild (testContext, source) {
   const dir = mkdtempSync(path.join(tmpdir(), 'flush-and-exit-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  testContext.after(() => rmSync(dir, { recursive: true, force: true }))
   writeFileSync(path.join(dir, 'flush-and-exit.cjs'), outputFiles[0].text)
   const entry = path.join(dir, 'child.cjs')
   writeFileSync(entry, source)
@@ -48,8 +49,8 @@ function runChild(t, source) {
   })
 }
 
-test('writes queued on both pipes reach the parent before the exit', async t => {
-  const { stdout, stderr, code } = await runChild(t, `
+test('writes queued on both pipes reach the parent before the exit', async testContext => {
+  const { stdout, stderr, code } = await runChild(testContext, `
     const { flushAndExit } = require('./flush-and-exit.cjs')
     process.stdout.write(${JSON.stringify(CHUNK)})
     process.stderr.write(${JSON.stringify(CHUNK)})
@@ -62,8 +63,8 @@ test('writes queued on both pipes reach the parent before the exit', async t => 
   assert.equal(code, 0)
 })
 
-test('keeps the exit code the failure handler set', async t => {
-  const { stdout, code } = await runChild(t, `
+test('keeps the exit code the failure handler set', async testContext => {
+  const { stdout, code } = await runChild(testContext, `
     const { flushAndExit } = require('./flush-and-exit.cjs')
     process.exitCode = 1
     process.stdout.write(${JSON.stringify(CHUNK)})
@@ -74,8 +75,8 @@ test('keeps the exit code the failure handler set', async t => {
   assert.equal(code, 1)
 })
 
-test('exits while a handle keeps the loop alive', async t => {
-  const { code } = await runChild(t, `
+test('exits while a handle keeps the loop alive', async testContext => {
+  const { code } = await runChild(testContext, `
     const { flushAndExit } = require('./flush-and-exit.cjs')
     setInterval(() => {}, 1000)
     flushAndExit()

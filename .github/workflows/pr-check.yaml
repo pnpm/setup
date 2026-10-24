@@ -26,3 +26,17 @@ jobs:
 
       - name: Check for uncommitted changes in dist
         run: git diff --exit-code dist/index.js
+
+  lint:
+    # The ESLint rules pnpm/pnpm and get-pnpm use, from @pnpm/eslint-config.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+          run_install: true
+
+      - name: Lint
+        run: pnpm run lint

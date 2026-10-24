@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+
 import { parseNodeVersionFile, readNodeVersionFile } from './node-version-file.ts'
 
 test('plain version files accept comments and normalize common nvm selectors', () => {
@@ -16,7 +17,7 @@ test('plain version files accept comments and normalize common nvm selectors', (
 test('.tool-versions reads node or nodejs and uses the first declared version', () => {
   assert.equal(
     parseNodeVersionFile('ruby 3.4.5\nnodejs 24.19.0 22.22.0 system\n', '.tool-versions'),
-    '24.19.0',
+    '24.19.0'
   )
   assert.equal(parseNodeVersionFile('node 22.22.0 # project runtime\n', '.tool-versions'), '22.22.0')
 })
@@ -24,32 +25,32 @@ test('.tool-versions reads node or nodejs and uses the first declared version', 
 test('invalid or unsupported version files fail clearly', () => {
   assert.throws(
     () => parseNodeVersionFile('ruby 3.4.5\n', '.tool-versions'),
-    /does not declare a Node\.js version/,
+    /does not declare a Node\.js version/
   )
   assert.throws(
     () => parseNodeVersionFile('22.22.0\n24.19.0\n', '.node-version'),
-    /must contain exactly one/,
+    /must contain exactly one/
   )
   assert.throws(
     () => parseNodeVersionFile('system\n', '.node-version'),
-    /pnpm cannot install/,
+    /pnpm cannot install/
   )
   assert.throws(
     () => parseNodeVersionFile('lts/\n', '.nvmrc'),
-    /invalid Node\.js version selector/,
+    /invalid Node\.js version selector/
   )
 })
 
-test('node-version-file resolves relative to working-directory', t => {
-  const workspace = createWorkspace(t)
+test('node-version-file resolves relative to working-directory', testContext => {
+  const workspace = createWorkspace(testContext)
   mkdirSync(path.join(workspace, 'web'))
   writeFileSync(path.join(workspace, 'web', '.node-version'), '24.19.0\n')
 
   assert.equal(readNodeVersionFile(inputs({ workingDirectory: 'web', nodeVersionFile: '.node-version' })), '24.19.0')
 })
 
-test('a missing node-version-file fails with its resolved path', t => {
-  const workspace = createWorkspace(t)
+test('a missing node-version-file fails with its resolved path', testContext => {
+  const workspace = createWorkspace(testContext)
   const expectedPath = path.join(workspace, 'web', '.node-version')
 
   assert.throws(
@@ -57,12 +58,12 @@ test('a missing node-version-file fails with its resolved path', t => {
     error => {
       assert.equal(error.message, `The specified Node version file does not exist: ${expectedPath}`)
       return true
-    },
+    }
   )
 })
 
-test('discovery checks files in priority order inside working-directory', t => {
-  const workspace = createWorkspace(t)
+test('discovery checks files in priority order inside working-directory', testContext => {
+  const workspace = createWorkspace(testContext)
   mkdirSync(path.join(workspace, 'web'))
   writeFileSync(path.join(workspace, '.node-version'), '20')
   const options = inputs({ workingDirectory: 'web' })
@@ -76,33 +77,33 @@ test('discovery checks files in priority order inside working-directory', t => {
   assert.equal(readNodeVersionFile(options), '26')
 })
 
-test('discovery ignores unrelated tool versions but an explicit file must declare Node', t => {
-  const workspace = createWorkspace(t)
+test('discovery ignores unrelated tool versions but an explicit file must declare Node', testContext => {
+  const workspace = createWorkspace(testContext)
   writeFileSync(path.join(workspace, '.tool-versions'), 'ruby 3.4.5')
   assert.equal(readNodeVersionFile(inputs()), undefined)
   assert.throws(() => readNodeVersionFile(inputs({ nodeVersionFile: '.tool-versions' })), /does not declare a Node/)
 })
 
-test('an invalid discovered file fails instead of falling through to another file', t => {
-  const workspace = createWorkspace(t)
+test('an invalid discovered file fails instead of falling through to another file', testContext => {
+  const workspace = createWorkspace(testContext)
   writeFileSync(path.join(workspace, '.node-version'), '')
   writeFileSync(path.join(workspace, '.nvmrc'), '24')
   assert.throws(() => readNodeVersionFile(inputs()), /must contain exactly one/)
   assert.equal(readNodeVersionFile(inputs({ nodeVersionFile: false })), undefined)
 })
 
-test('an explicit path overrides automatic file selection', t => {
-  const workspace = createWorkspace(t)
+test('an explicit path overrides automatic file selection', testContext => {
+  const workspace = createWorkspace(testContext)
   writeFileSync(path.join(workspace, '.node-version'), '22')
   writeFileSync(path.join(workspace, 'custom-version'), '24')
   assert.equal(readNodeVersionFile(inputs({ nodeVersionFile: 'custom-version' })), '24')
 })
 
-function createWorkspace(t) {
+function createWorkspace (testContext) {
   const workspace = mkdtempSync(path.join(tmpdir(), 'pnpm-setup-node-version-'))
   const previousWorkspace = process.env.GITHUB_WORKSPACE
   process.env.GITHUB_WORKSPACE = workspace
-  t.after(() => {
+  testContext.after(() => {
     if (previousWorkspace === undefined) {
       delete process.env.GITHUB_WORKSPACE
     } else {
@@ -113,7 +114,7 @@ function createWorkspace(t) {
   return workspace
 }
 
-function inputs(overrides = {}) {
+function inputs (overrides = {}) {
   return {
     dest: 'setup-pnpm',
     cache: false,

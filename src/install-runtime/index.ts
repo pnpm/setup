@@ -1,11 +1,13 @@
-import { exportVariable, setFailed, startGroup, endGroup, info, warning } from '@actions/core'
-import { spawn } from 'child_process'
-import { readFileSync } from 'fs'
-import path from 'path'
-import util from 'util'
+import { spawn } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import util from 'node:util'
+
+import { endGroup, exportVariable, info, setFailed, startGroup, warning } from '@actions/core'
 import { parse as parseYaml } from 'yaml'
-import { Inputs, RuntimeName } from '../inputs'
-import { readNodeVersionFile } from './node-version-file'
+
+import { Inputs, RuntimeName } from '../inputs/index.js'
+import { readNodeVersionFile } from './node-version-file.js'
 
 const SUPPORTED_RUNTIMES: ReadonlySet<RuntimeName> = new Set(['node', 'bun', 'deno'])
 
@@ -24,14 +26,14 @@ export interface RuntimeRequest {
   readonly version: string
 }
 
-export function resolveRuntimeRequests(inputs: Inputs): RuntimeRequest[] {
+export function resolveRuntimeRequests (inputs: Inputs): RuntimeRequest[] {
   if (inputs.runtime) {
     const { name } = inputs.runtime
     if (inputs.nodeVersionFile && (name !== 'node' || inputs.runtime.version)) {
       warning(
         name === 'node'
           ? '`node-version-file` is ignored because `runtime` already includes a Node.js version.'
-          : `\`node-version-file\` is ignored because \`runtime\` explicitly selects ${name}.`,
+          : `\`node-version-file\` is ignored because \`runtime\` explicitly selects ${name}.`
       )
     }
     const version = inputs.runtime.version
@@ -53,9 +55,9 @@ export function resolveRuntimeRequests(inputs: Inputs): RuntimeRequest[] {
   ]
 }
 
-export async function installRuntime(
+export async function installRuntime (
   request: RuntimeRequest,
-  binDest: string,
+  binDest: string
 ): Promise<InstalledRuntime | undefined> {
   startGroup(`Installing runtime ${request.name}@${request.version}...`)
   let exitCode: number
@@ -86,16 +88,16 @@ export async function installRuntime(
  * workflow that installs a runtime. Report the problem and let the caller
  * fall back to the requested selector.
  */
-export async function getInstalledRuntimeVersions(
+export async function getInstalledRuntimeVersions (
   names: readonly RuntimeName[],
-  binDest: string,
+  binDest: string
 ): Promise<Map<RuntimeName, string>> {
   const versions = new Map<RuntimeName, string>()
   if (names.length === 0) return versions
 
   try {
     // `pm-on-fail=ignore` keeps pnpm from switching to the project's pinned
-    // version (which prints "Installing …"), and the silent reporter drops
+    // version (which prints "Installing ..."), and the silent reporter drops
     // warnings such as the one `--global` prints when the project sets
     // `pmOnFail`. Both would land on stdout ahead of the JSON.
     const stdout = await runPnpmForOutput(binDest, [
@@ -123,12 +125,12 @@ export async function getInstalledRuntimeVersions(
  * text from the first line that starts with `[` and parses to the end. A
  * `[WARN]` line also starts with `[`, so the first one is not taken on trust.
  */
-function parseListing(stdout: string): unknown {
+function parseListing (stdout: string): unknown {
   const lines = stdout.split(/\r?\n/)
-  for (let i = 0; i < lines.length; i++) {
-    if (!lines[i].startsWith('[')) continue
+  for (let start = 0; start < lines.length; start++) {
+    if (!lines[start].startsWith('[')) continue
     try {
-      return JSON.parse(lines.slice(i).join('\n'))
+      return JSON.parse(lines.slice(start).join('\n'))
     } catch {}
   }
   return JSON.parse(stdout)
@@ -144,7 +146,7 @@ function parseListing(stdout: string): unknown {
  * Turn the shims off for the runtimes we installed, leaving every other
  * runtime at pnpm's defaults. A value the workflow set itself always wins.
  */
-export function keepInstalledRuntimesAuthoritative(runtimes: readonly InstalledRuntime[]) {
+export function keepInstalledRuntimesAuthoritative (runtimes: readonly InstalledRuntime[]): void {
   if (runtimes.length === 0) return
 
   // An empty value counts as unset, the same rule pnpm applies when it reads
@@ -157,19 +159,19 @@ export function keepInstalledRuntimesAuthoritative(runtimes: readonly InstalledR
 
   exportVariable(
     GLOBAL_SHIMS_ENV_NAMES[0],
-    JSON.stringify(Object.fromEntries(runtimes.map(runtime => [runtime.name, false]))),
+    JSON.stringify(Object.fromEntries(runtimes.map(runtime => [runtime.name, false])))
   )
 }
 
-export function logSkippedRuntime() {
+export function logSkippedRuntime (): void {
   info('No runtime requested or Node.js version file detected. Skipping runtime install.')
 }
 
-function defaultVersionFor(name: RuntimeName): string {
+function defaultVersionFor (name: RuntimeName): string {
   return name === 'node' ? 'lts' : 'latest'
 }
 
-function readManifest(inputs: Inputs): Record<string, unknown> | undefined {
+function readManifest (inputs: Inputs): Record<string, unknown> | undefined {
   const { GITHUB_WORKSPACE } = process.env
   if (!GITHUB_WORKSPACE) return undefined
   try {
@@ -188,7 +190,7 @@ interface DevEngineRuntimeEntry {
   readonly version?: string
 }
 
-function readDevEngineEntries(inputs: Inputs): DevEngineRuntimeEntry[] {
+function readDevEngineEntries (inputs: Inputs): DevEngineRuntimeEntry[] {
   const manifest = readManifest(inputs)
   const runtime = (manifest?.devEngines as { runtime?: unknown } | undefined)?.runtime
   if (!runtime) return []
@@ -198,11 +200,11 @@ function readDevEngineEntries(inputs: Inputs): DevEngineRuntimeEntry[] {
 // Resolve through the deduped list so an explicit `runtime` input picks the
 // same declaration the manifest-driven path would, and warns about the
 // duplicate the same way.
-function readDevEngineVersion(inputs: Inputs, name: RuntimeName): string | undefined {
+function readDevEngineVersion (inputs: Inputs, name: RuntimeName): string | undefined {
   return readDevEngineRuntimes(inputs).find(runtime => runtime.name === name)?.version
 }
 
-function readDevEngineRuntimes(inputs: Inputs): RuntimeRequest[] {
+function readDevEngineRuntimes (inputs: Inputs): RuntimeRequest[] {
   const runtimes = new Map<RuntimeName, RuntimeRequest>()
   for (const entry of readDevEngineEntries(inputs)) {
     if (!entry.name || !entry.version || !SUPPORTED_RUNTIMES.has(entry.name as RuntimeName)) continue
@@ -211,7 +213,7 @@ function readDevEngineRuntimes(inputs: Inputs): RuntimeRequest[] {
     const previous = runtimes.get(name)
     if (previous) {
       warning(
-        `Duplicate ${name} runtime versions declared in devEngines.runtime (${previous.version} and ${entry.version}); using the last declared version ${entry.version}.`,
+        `Duplicate ${name} runtime versions declared in devEngines.runtime (${previous.version} and ${entry.version}); using the last declared version ${entry.version}.`
       )
     }
     runtimes.set(name, { name, version: entry.version })
@@ -219,7 +221,7 @@ function readDevEngineRuntimes(inputs: Inputs): RuntimeRequest[] {
   return [...runtimes.values()]
 }
 
-function runPnpm(binDest: string, args: string[]): Promise<number> {
+function runPnpm (binDest: string, args: string[]): Promise<number> {
   const pnpmBin = path.join(binDest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
   return new Promise<number>((resolve, reject) => {
     const cp = spawn(pnpmBin, args, {
@@ -230,7 +232,7 @@ function runPnpm(binDest: string, args: string[]): Promise<number> {
   })
 }
 
-function runPnpmForOutput(binDest: string, args: string[]): Promise<string> {
+function runPnpmForOutput (binDest: string, args: string[]): Promise<string> {
   const pnpmBin = path.join(binDest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
   return new Promise<string>((resolve, reject) => {
     const cp = spawn(pnpmBin, args, {
@@ -252,5 +254,3 @@ function runPnpmForOutput(binDest: string, args: string[]): Promise<string> {
     })
   })
 }
-
-export default installRuntime

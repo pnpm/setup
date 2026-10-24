@@ -1,11 +1,13 @@
-import { info, setFailed, startGroup, endGroup } from '@actions/core'
-import { spawnSync } from 'child_process'
-import { existsSync } from 'fs'
-import path from 'path'
-import { Inputs } from '../inputs'
-import { lockfileDir } from './lockfile'
+import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import path from 'node:path'
 
-export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs.runtime)) {
+import { endGroup, info, setFailed, startGroup } from '@actions/core'
+
+import { Inputs } from '../inputs/index.js'
+import { lockfileDir } from './lockfile.js'
+
+export function runPnpmInstall (inputs: Inputs, runtimeInstalled = Boolean(inputs.runtime)): void {
   const args = ['install']
   if (inputs.requireLockfile) {
     args.push('--frozen-lockfile')
@@ -49,7 +51,7 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
         '`require-lockfile` is set but no pnpm-lock.yaml was found in ' +
         `${searched}, which is where an install in ${inputs.workingDirectory} ` +
         'reads one. Commit the lockfile, or unset `require-lockfile` to let ' +
-        'pnpm resolve and write one.',
+        'pnpm resolve and write one.'
       )
       return
     }
@@ -76,5 +78,3 @@ export function runPnpmInstall(inputs: Inputs, runtimeInstalled = Boolean(inputs
     setFailed(`${command} exited with status ${status}`)
   }
 }
-
-export default runPnpmInstall

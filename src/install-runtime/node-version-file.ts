@@ -1,11 +1,12 @@
-import { readFileSync } from 'fs'
-import path from 'path'
-import type { Inputs } from '../inputs'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
+import type { Inputs } from '../inputs/index.js'
 
 const TOOL_VERSION_NAMES = new Set(['node', 'nodejs'])
 const NODE_VERSION_FILES = ['.node-version', '.nvmrc', '.tool-versions']
 
-export function readNodeVersionFile(inputs: Inputs): string | undefined {
+export function readNodeVersionFile (inputs: Inputs): string | undefined {
   if (inputs.nodeVersionFile === false) return undefined
 
   const { GITHUB_WORKSPACE } = process.env
@@ -23,7 +24,7 @@ export function readNodeVersionFile(inputs: Inputs): string | undefined {
     } catch (error: unknown) {
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
         if (!inputs.nodeVersionFile) continue
-        throw new Error(`The specified Node version file does not exist: ${filePath}`)
+        throw new Error(`The specified Node version file does not exist: ${filePath}`, { cause: error })
       }
       throw error
     }
@@ -35,7 +36,7 @@ export function readNodeVersionFile(inputs: Inputs): string | undefined {
   return undefined
 }
 
-export function parseNodeVersionFile(contents: string, fileName = 'Node version file'): string {
+export function parseNodeVersionFile (contents: string, fileName = 'Node version file'): string {
   const lines = cleanLines(contents)
   if (fileName === '.tool-versions') {
     const declaration = findToolVersion(lines)
@@ -48,18 +49,18 @@ export function parseNodeVersionFile(contents: string, fileName = 'Node version 
     return normalizeNodeVersion(version, fileName)
   }
 
-  const versions = lines.filter(line => !/^[A-Za-z][A-Za-z0-9_-]*\s*=/.test(line))
+  const versions = lines.filter(line => !/^[A-Z][\w-]*\s*=/i.test(line))
   if (versions.length !== 1) {
     throw new Error(`${fileName} must contain exactly one Node.js version selector.`)
   }
   return normalizeNodeVersion(versions[0], fileName)
 }
 
-function findToolVersion(lines: string[]): string | undefined {
+function findToolVersion (lines: string[]): string | undefined {
   return lines.find(line => TOOL_VERSION_NAMES.has(line.split(/\s+/, 1)[0]))
 }
 
-function cleanLines(contents: string): string[] {
+function cleanLines (contents: string): string[] {
   return contents
     .replace(/^\uFEFF/, '')
     .split(/\r?\n/)
@@ -67,7 +68,7 @@ function cleanLines(contents: string): string[] {
     .filter(Boolean)
 }
 
-function normalizeNodeVersion(version: string, fileName: string): string {
+function normalizeNodeVersion (version: string, fileName: string): string {
   if (version.includes(',')) {
     throw new Error(`${fileName} contains an invalid Node.js version selector: ${version}`)
   }

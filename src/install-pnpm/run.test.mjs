@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+
 import { build } from 'esbuild'
 
 const { outputFiles } = await build({
@@ -12,11 +13,11 @@ const { outputFiles } = await build({
   bundle: true, platform: 'node', format: 'cjs', write: false,
   plugins: [{
     name: 'installer-fixtures',
-    setup(build) {
-      build.onResolve({ filter: /^(@actions\/core|\.\/download|child_process)$/ }, args => ({ path: args.path, namespace: 'fixture' }))
+    setup (build) {
+      build.onResolve({ filter: /^(@actions\/core|\.\/download\.js|node:child_process)$/ }, args => ({ path: args.path, namespace: 'fixture' }))
       build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents:
         args.path === '@actions/core' ? 'export const info = () => {}; export const addPath = () => {}; export const exportVariable = () => {}' :
-        args.path === './download' ? `
+          args.path === './download.js' ? `
           export async function downloadPnpm(spec) {
             globalThis.selectedSpec = spec
             const version = /^\\d+\\.\\d+\\.\\d+$/.test(spec) ? spec : '12.8.2'
@@ -38,10 +39,10 @@ const { outputFiles } = await build({
 const bundled = { exports: {} }
 new Function('require', 'module', 'exports', outputFiles[0].text)(createRequire(import.meta.url), bundled, bundled.exports)
 
-test('installer selects the lock, preserves explicit input, and isolates its sanity check', async t => {
+test('installer selects the lock, preserves explicit input, and isolates its sanity check', async testContext => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'setup-installer-'))
   const previous = process.env.GITHUB_WORKSPACE
-  t.after(() => {
+  testContext.after(() => {
     rmSync(root, { recursive: true, force: true })
     if (previous === undefined) delete process.env.GITHUB_WORKSPACE
     else process.env.GITHUB_WORKSPACE = previous
@@ -97,6 +98,7 @@ importers: {}
     { devEngines: { packageManager: { name: 'pnpm', version: '12.8.1' } } },
   ]) {
     writeFileSync(path.join(root, 'package.json'), JSON.stringify(manifest))
+    // eslint-disable-next-line no-await-in-loop -- each manifest is written to the same file before it is read
     await bundled.exports.runSelfInstaller(inputs)
     assert.equal(globalThis.selectedSpec, '12.8.1')
   }
@@ -106,10 +108,10 @@ importers: {}
   assert.equal(globalThis.selectedSpec, '>=12.0.0 <13.0.0')
 })
 
-test('a member keeps its own pnpm declaration when the workspace root has none', async t => {
+test('a member keeps its own pnpm declaration when the workspace root has none', async testContext => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'setup-installer-'))
   const previous = process.env.GITHUB_WORKSPACE
-  t.after(() => {
+  testContext.after(() => {
     rmSync(root, { recursive: true, force: true })
     if (previous === undefined) delete process.env.GITHUB_WORKSPACE
     else process.env.GITHUB_WORKSPACE = previous

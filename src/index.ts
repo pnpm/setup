@@ -1,22 +1,23 @@
-import { setFailed, saveState, getState } from '@actions/core'
-import restoreCache, { finalizeCache, fingerprintRestoredStore } from './cache-restore'
-import saveCache from './cache-save'
-import { flushAndExit } from './flush-and-exit'
-import getInputs, { Inputs } from './inputs'
-import installPnpm from './install-pnpm'
+import { getState, saveState, setFailed } from '@actions/core'
+
+import { finalizeCache, fingerprintRestoredStore, restoreCache } from './cache-restore/index.js'
+import { saveCache } from './cache-save/index.js'
+import { flushAndExit } from './flush-and-exit.js'
+import { getInputs, Inputs } from './inputs/index.js'
+import { install as installPnpm } from './install-pnpm/index.js'
 import {
   getInstalledRuntimeVersions,
-  resolveRuntimeRequests,
-  installRuntime,
   InstalledRuntime,
+  installRuntime,
   keepInstalledRuntimesAuthoritative,
   logSkippedRuntime,
-} from './install-runtime'
-import { saveVerificationCache, snapshotVerificationLog } from './lockfile-verification-cache'
-import setOutputs from './outputs'
-import pnpmInstall from './pnpm-install'
+  resolveRuntimeRequests,
+} from './install-runtime/index.js'
+import { saveVerificationCache, snapshotVerificationLog } from './lockfile-verification-cache/index.js'
+import { setOutputs } from './outputs/index.js'
+import { runPnpmInstall as pnpmInstall } from './pnpm-install/index.js'
 
-async function main() {
+async function main () {
   if (getState('is_post') === 'true') {
     await runPost()
   } else {
@@ -24,7 +25,7 @@ async function main() {
   }
 }
 
-async function runMain() {
+async function runMain () {
   const inputs = getInputs()
   saveState('inputs', inputs)
   saveState('is_post', 'true')
@@ -37,6 +38,7 @@ async function runMain() {
 
   const runtimes: InstalledRuntime[] = []
   for (const request of requests) {
+    // eslint-disable-next-line no-await-in-loop -- runtimes install one at a time, in declaration order
     const runtime = await installRuntime(request, result.binDest)
     if (runtime === undefined) return
     runtimes.push(runtime)
@@ -53,7 +55,7 @@ async function runMain() {
   // both. Fall back to the selector if the installed version cannot be read.
   const installedVersions = await getInstalledRuntimeVersions(
     runtimes.map(runtime => runtime.name),
-    result.binDest,
+    result.binDest
   )
   const installed = runtimes.map(runtime => ({
     name: runtime.name,
@@ -81,7 +83,7 @@ async function runMain() {
   }
 }
 
-async function runPost() {
+async function runPost () {
   const inputs = JSON.parse(getState('inputs')) as Inputs
   // Covers a job that installs in a later step of its own; when this action
   // installed, the log was already saved then. Runs before saveCache, which

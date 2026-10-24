@@ -2,15 +2,16 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { after, test } from 'node:test'
 import { DatabaseSync } from 'node:sqlite'
+import { after, test } from 'node:test'
+
 import { fingerprintStore, statStore } from './index.ts'
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'setup-store-fingerprint-'))
 after(() => rmSync(root, { recursive: true, force: true }))
 
 let stores = 0
-function createStore() {
+function createStore () {
   const store = path.join(root, `store-${stores++}`)
   mkdirSync(path.join(store, 'files', '00'), { recursive: true })
   mkdirSync(path.join(store, 'tmp'))
@@ -19,7 +20,7 @@ function createStore() {
   return store
 }
 
-function writeIndex(store, keys, data = 'data') {
+function writeIndex (store, keys, data = 'data') {
   const db = new DatabaseSync(path.join(store, 'index.db'))
   db.exec('PRAGMA journal_mode=WAL')
   db.exec('CREATE TABLE IF NOT EXISTS package_index (key TEXT PRIMARY KEY, data BLOB NOT NULL) WITHOUT ROWID')
@@ -29,7 +30,7 @@ function writeIndex(store, keys, data = 'data') {
   db.close()
 }
 
-function touch(file) {
+function touch (file) {
   const later = new Date(Date.now() + 60_000)
   utimesSync(file, later, later)
 }
@@ -112,10 +113,10 @@ test('an index with writes still in the write-ahead log has no fingerprint', asy
   }
 })
 
-test('an index written while it is being read has no fingerprint', async t => {
+test('an index written while it is being read has no fingerprint', async testContext => {
   const store = createStore()
   const prepare = DatabaseSync.prototype.prepare
-  t.mock.method(DatabaseSync.prototype, 'prepare', function (sql) {
+  testContext.mock.method(DatabaseSync.prototype, 'prepare', function (sql) {
     if (sql.startsWith('SELECT key')) writeIndex(store, ['a@1', 'b@1'])
     return prepare.call(this, sql)
   })
@@ -165,7 +166,7 @@ test('a store without an index has no stat fingerprint', async () => {
 
 test('a change in any bucket of a store with many buckets changes the fingerprint', async () => {
   const store = createStore()
-  for (let i = 1; i < 40; i++) mkdirSync(path.join(store, 'files', String(i).padStart(2, '0')))
+  for (let bucket = 1; bucket < 40; bucket++) mkdirSync(path.join(store, 'files', String(bucket).padStart(2, '0')))
   const before = await fingerprintStore(store)
   assert.equal(await fingerprintStore(store), before)
   writeFileSync(path.join(store, 'files', '39', 'abc'), 'content')

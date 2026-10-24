@@ -1,21 +1,23 @@
+import { spawn } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { mkdir, rm } from 'node:fs/promises'
+import path from 'node:path'
+import util from 'node:util'
+
 import { addPath, exportVariable, info } from '@actions/core'
-import { spawn } from 'child_process'
-import { readFileSync } from 'fs'
-import { mkdir, rm } from 'fs/promises'
-import path from 'path'
-import util from 'util'
 import { parse as parseYaml } from 'yaml'
-import { Inputs } from '../inputs'
-import { downloadPnpm } from './download'
-import { readLockedPnpmVersion } from './locked-version'
-import { packageManagerLockfileDirectory, packageManagerManifest } from './project'
+
+import { Inputs } from '../inputs/index.js'
+import { downloadPnpm } from './download.js'
+import { readLockedPnpmVersion } from './locked-version.js'
+import { packageManagerLockfileDirectory, packageManagerManifest } from './project.js'
 
 export interface SelfInstallerResult {
   binDest: string
   pnpmHome: string
 }
 
-export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerResult> {
+export async function runSelfInstaller (inputs: Inputs): Promise<SelfInstallerResult> {
   const { version, dest, packageJsonFile, registry } = inputs
 
   const checkout = process.env.GITHUB_WORKSPACE
@@ -63,7 +65,7 @@ export async function runSelfInstaller(inputs: Inputs): Promise<SelfInstallerRes
  * A workspace root that declares no pnpm version leaves the member's own
  * declaration in charge, as it was before members inherited from the root.
  */
-function selectPackageManagerManifest(projectManifest: string, checkout: string): string {
+function selectPackageManagerManifest (projectManifest: string, checkout: string): string {
   const rootManifest = packageManagerManifest(projectManifest, checkout)
   if (rootManifest === projectManifest) return rootManifest
   const { packageManager, devEngines } = readPnpmDeclaration(rootManifest)
@@ -77,7 +79,7 @@ interface PnpmDeclaration {
   readonly devEngines?: { packageManager?: { name?: string; version?: string } }
 }
 
-function readPnpmDeclaration(packageJsonFile: string): PnpmDeclaration {
+function readPnpmDeclaration (packageJsonFile: string): PnpmDeclaration {
   const { GITHUB_WORKSPACE } = process.env
   if (!GITHUB_WORKSPACE) return {}
   try {
@@ -93,7 +95,7 @@ function readPnpmDeclaration(packageJsonFile: string): PnpmDeclaration {
   }
 }
 
-function readTargetVersion(opts: {
+function readTargetVersion (opts: {
   readonly version?: string | undefined
   readonly packageJsonFile: string
 }): string {
@@ -144,14 +146,16 @@ Please specify it by one of the following ways:
   - in the package.json with the key "devEngines.packageManager"`)
 }
 
-function readVersion(pnpmBin: string): Promise<string> {
+function readVersion (pnpmBin: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     // Check the downloaded binary itself, not a version selected by the project.
     const cp = spawn(pnpmBin, ['--config.pm-on-fail=ignore', '--version'], {
       stdio: ['ignore', 'pipe', 'inherit'],
     })
     let output = ''
-    cp.stdout.on('data', (chunk) => { output += chunk })
+    cp.stdout.on('data', (chunk) => {
+      output += chunk
+    })
     cp.on('error', reject)
     cp.on('close', (code) => {
       if (code === 0) {
@@ -162,5 +166,3 @@ function readVersion(pnpmBin: string): Promise<string> {
     })
   })
 }
-
-export default runSelfInstaller

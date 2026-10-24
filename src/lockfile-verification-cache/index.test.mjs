@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+
 import { build } from 'esbuild'
 
 const { outputFiles } = await build({
@@ -12,7 +13,7 @@ const { outputFiles } = await build({
   bundle: true, platform: 'node', format: 'cjs', write: false,
   plugins: [{
     name: 'verification-cache-fixtures',
-    setup(build) {
+    setup (build) {
       build.onResolve({ filter: /^@actions\/(cache|core|exec)$/ }, args => ({ path: args.path, namespace: 'fixture' }))
       build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents:
         args.path === '@actions/cache' ? `
@@ -36,13 +37,13 @@ const { outputFiles } = await build({
 
 // The main and post steps run as separate processes that share only the
 // action's state, so each step gets a fresh copy of the module.
-function loadStep() {
+function loadStep () {
   const bundled = { exports: {} }
   new Function('require', 'module', 'exports', outputFiles[0].text)(createRequire(import.meta.url), bundled, bundled.exports)
   return bundled.exports
 }
 
-function setup(t, save) {
+function setup (testContext, save) {
   const cacheDir = mkdtempSync(path.join(os.tmpdir(), 'setup-verification-'))
   const fixture = { cacheDir, state: new Map(), warnings: [], saves: 0 }
   fixture.save = () => {
@@ -50,7 +51,7 @@ function setup(t, save) {
     return save()
   }
   globalThis.fixture = fixture
-  t.after(() => {
+  testContext.after(() => {
     rmSync(cacheDir, { recursive: true, force: true })
     delete globalThis.fixture
   })
@@ -59,7 +60,7 @@ function setup(t, save) {
 
 // The runtime installs leave a record in the log before the snapshot, which is
 // what bounds what the project install may add.
-async function runMainStep(log, added) {
+async function runMainStep (log, added) {
   const main = loadStep()
   await main.restoreVerificationCache('hash')
   writeFileSync(log, 'runtime\n')
@@ -68,30 +69,32 @@ async function runMainStep(log, added) {
   await main.saveVerificationCache(1)
 }
 
-test('a save that lost the race is not retried in the post step', async t => {
-  const { fixture, log } = setup(t, () => -1)
+test('a save that lost the race is not retried in the post step', async testContext => {
+  const { fixture, log } = setup(testContext, () => -1)
   await runMainStep(log, ['a'])
   await loadStep().saveVerificationCache()
   assert.equal(fixture.saves, 1)
 })
 
-test('a save that failed is not retried in the post step', async t => {
-  const { fixture, log } = setup(t, () => { throw new Error('offline') })
+test('a save that failed is not retried in the post step', async testContext => {
+  const { fixture, log } = setup(testContext, () => {
+    throw new Error('offline')
+  })
   await runMainStep(log, ['a'])
   await loadStep().saveVerificationCache()
   assert.equal(fixture.saves, 1)
   assert.equal(fixture.warnings.length, 1)
 })
 
-test('a log the main step rejected is not saved by the post step', async t => {
-  const { fixture, log } = setup(t, () => 1)
+test('a log the main step rejected is not saved by the post step', async testContext => {
+  const { fixture, log } = setup(testContext, () => 1)
   await runMainStep(log, ['a', 'b'])
   await loadStep().saveVerificationCache()
   assert.equal(fixture.saves, 0)
 })
 
-test('the post step saves the log when the job installs in a step of its own', async t => {
-  const { fixture, log } = setup(t, () => 1)
+test('the post step saves the log when the job installs in a step of its own', async testContext => {
+  const { fixture, log } = setup(testContext, () => 1)
   const main = loadStep()
   await main.restoreVerificationCache('hash')
   writeFileSync(log, 'runtime\n')
@@ -103,8 +106,8 @@ test('the post step saves the log when the job installs in a step of its own', a
 
 const restoredPath = fixture => fixture.state.get('lockfile_verification_cache_path')
 
-test('a warning printed ahead of the cache path is not part of the path', async t => {
-  const { fixture, log } = setup(t, () => 1)
+test('a warning printed ahead of the cache path is not part of the path', async testContext => {
+  const { fixture, log } = setup(testContext, () => 1)
   fixture.exec = () => ({
     exitCode: 0,
     stdout: `[WARN] This project requires Node.js 26.10.0. Your current Node.js is v24.18.0\n${fixture.cacheDir}\n`,
@@ -116,8 +119,8 @@ test('a warning printed ahead of the cache path is not part of the path', async 
   assert.equal(fixture.saves, 1)
 })
 
-test('usage text from a pnpm without `cache path` falls back to the configured directory', async t => {
-  const { fixture, log } = setup(t, () => 1)
+test('usage text from a pnpm without `cache path` falls back to the configured directory', async testContext => {
+  const { fixture, log } = setup(testContext, () => 1)
   fixture.exec = command => command === 'pnpm cache path'
     ? { exitCode: 0, stdout: 'Usage: pnpm cache <command>\n\nInspect and manage the metadata cache\n' }
     : { exitCode: 0, stdout: `[WARN] some warning\n${fixture.cacheDir}\n` }
@@ -125,10 +128,10 @@ test('usage text from a pnpm without `cache path` falls back to the configured d
   assert.equal(restoredPath(fixture), log)
 })
 
-test('an unset cacheDir falls back to the default directory', async t => {
-  const { fixture } = setup(t, () => 1)
+test('an unset cacheDir falls back to the default directory', async testContext => {
+  const { fixture } = setup(testContext, () => 1)
   const previous = process.env.XDG_CACHE_HOME
-  t.after(() => {
+  testContext.after(() => {
     if (previous === undefined) delete process.env.XDG_CACHE_HOME
     else process.env.XDG_CACHE_HOME = previous
   })

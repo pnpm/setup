@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+
 import { build } from 'esbuild'
 
 const { outputFiles } = await build({
@@ -16,13 +17,13 @@ const { outputFiles } = await build({
 })
 const bundledModule = { exports: {} }
 new Function('require', 'module', 'exports', outputFiles[0].text)(
-  createRequire(import.meta.url), bundledModule, bundledModule.exports,
+  createRequire(import.meta.url), bundledModule, bundledModule.exports
 )
 const { getInstalledRuntimeVersions } = bundledModule.exports
 
-function fakePnpm(t, body) {
+function fakePnpm (testContext, body) {
   const binDest = mkdtempSync(path.join(tmpdir(), 'pnpm-installed-versions-'))
-  t.after(() => rmSync(binDest, { recursive: true, force: true }))
+  testContext.after(() => rmSync(binDest, { recursive: true, force: true }))
   const bin = path.join(binDest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
   writeFileSync(bin, `#!/bin/sh\n${body}\n`)
   chmodSync(bin, 0o755)
@@ -31,22 +32,22 @@ function fakePnpm(t, body) {
 
 // The runner reports through stdout too, so the capture has to pass every
 // write along to it.
-function captureStdout(t) {
+function captureStdout (testContext) {
   const written = []
   const original = process.stdout.write
   process.stdout.write = function (chunk, ...rest) {
     written.push(String(chunk))
     return original.call(this, chunk, ...rest)
   }
-  t.after(() => {
+  testContext.after(() => {
     process.stdout.write = original
   })
   return written
 }
 
-test('reports the signal when the listing is terminated', { skip: process.platform === 'win32' }, async t => {
-  const binDest = fakePnpm(t, 'kill -TERM $$\nsleep 5')
-  const logged = captureStdout(t)
+test('reports the signal when the listing is terminated', { skip: process.platform === 'win32' }, async testContext => {
+  const binDest = fakePnpm(testContext, 'kill -TERM $$\nsleep 5')
+  const logged = captureStdout(testContext)
 
   const versions = await getInstalledRuntimeVersions(['node'], binDest)
 
@@ -54,9 +55,9 @@ test('reports the signal when the listing is terminated', { skip: process.platfo
   assert.match(logged.join(''), /::warning::Unable to determine the installed runtime versions: pnpm .*list --global --json --depth 0 exited with SIGTERM/)
 })
 
-test('reports the exit code when the listing fails', { skip: process.platform === 'win32' }, async t => {
-  const binDest = fakePnpm(t, 'exit 3')
-  const logged = captureStdout(t)
+test('reports the exit code when the listing fails', { skip: process.platform === 'win32' }, async testContext => {
+  const binDest = fakePnpm(testContext, 'exit 3')
+  const logged = captureStdout(testContext)
 
   const versions = await getInstalledRuntimeVersions(['node'], binDest)
 
@@ -64,10 +65,10 @@ test('reports the exit code when the listing fails', { skip: process.platform ==
   assert.match(logged.join(''), /exited with code 3/)
 })
 
-test('reads the version out of a successful listing', { skip: process.platform === 'win32' }, async t => {
+test('reads the version out of a successful listing', { skip: process.platform === 'win32' }, async testContext => {
   const listing = JSON.stringify([{ dependencies: { node: { version: '24.9.0' } } }])
-  const binDest = fakePnpm(t, `cat <<'JSON'\n${listing}\nJSON`)
-  captureStdout(t)
+  const binDest = fakePnpm(testContext, `cat <<'JSON'\n${listing}\nJSON`)
+  captureStdout(testContext)
 
   const versions = await getInstalledRuntimeVersions(['node'], binDest)
 
@@ -78,10 +79,10 @@ for (const [label, preamble] of [
   ['a warning', '[WARN] Using --global skips the package manager check for this project'],
   ['progress output', 'Installing pnpm@12.8.1...'],
 ]) {
-  test(`reads the listing when ${label} is printed ahead of it`, { skip: process.platform === 'win32' }, async t => {
+  test(`reads the listing when ${label} is printed ahead of it`, { skip: process.platform === 'win32' }, async testContext => {
     const listing = JSON.stringify([{ dependencies: { node: { version: '24.9.0' } } }], null, 2)
-    const binDest = fakePnpm(t, `cat <<'JSON'\n${preamble}\n${listing}\nJSON`)
-    captureStdout(t)
+    const binDest = fakePnpm(testContext, `cat <<'JSON'\n${preamble}\n${listing}\nJSON`)
+    captureStdout(testContext)
 
     const versions = await getInstalledRuntimeVersions(['node'], binDest)
 
@@ -89,10 +90,10 @@ for (const [label, preamble] of [
   })
 }
 
-test('keeps pnpm from switching versions or printing warnings while listing', { skip: process.platform === 'win32' }, async t => {
+test('keeps pnpm from switching versions or printing warnings while listing', { skip: process.platform === 'win32' }, async testContext => {
   const listing = JSON.stringify([{ dependencies: { node: { version: '24.9.0' } } }])
-  const binDest = fakePnpm(t, `case "$*" in *--config.pm-on-fail=ignore*--reporter=silent*) cat <<'JSON'\n${listing}\nJSON\n;; *) exit 9;; esac`)
-  captureStdout(t)
+  const binDest = fakePnpm(testContext, `case "$*" in *--config.pm-on-fail=ignore*--reporter=silent*) cat <<'JSON'\n${listing}\nJSON\n;; *) exit 9;; esac`)
+  captureStdout(testContext)
 
   const versions = await getInstalledRuntimeVersions(['node'], binDest)
 

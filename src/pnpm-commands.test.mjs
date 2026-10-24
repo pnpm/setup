@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { after, beforeEach, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+
 import { build } from 'esbuild'
 
 const { outputFiles } = await build({
@@ -23,7 +24,7 @@ const { outputFiles } = await build({
 })
 const bundledModule = { exports: {} }
 new Function('require', 'module', 'exports', outputFiles[0].text)(
-  createRequire(import.meta.url), bundledModule, bundledModule.exports,
+  createRequire(import.meta.url), bundledModule, bundledModule.exports
 )
 const { getInputs, runPnpmInstall, pruneStore, resolveCacheDependencyPath } = bundledModule.exports
 
@@ -57,7 +58,7 @@ writeFileSync(path.join(project, 'root'), `
     process.exitCode = 1
   }
 `)
-writeFileSync(path.join(project, 'config'), `console.log(process.env.PNPM_TEST_SHARED_LOCKFILE || 'true')`)
+writeFileSync(path.join(project, 'config'), 'console.log(process.env.PNPM_TEST_SHARED_LOCKFILE || \'true\')')
 const shimScript = path.join(dest, 'record.cjs')
 writeFileSync(shimScript, recorder)
 const quoteShell = value => `'${value.replaceAll("'", "'\\''")}'`
@@ -67,10 +68,10 @@ const shim = process.platform === 'win32'
 writeFileSync(path.join(dest, 'bin', process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'), shim, { mode: 0o755 })
 after(() => rmSync(root, { recursive: true, force: true }))
 
-beforeEach(t => {
+beforeEach(testContext => {
   const previousEnv = { ...process.env }
   const previousExitCode = process.exitCode
-  t.after(() => {
+  testContext.after(() => {
     for (const name of Object.keys(process.env)) {
       if (!(name in previousEnv)) delete process.env[name]
     }
@@ -189,11 +190,11 @@ test('pruning is skipped when caching is disabled', async () => {
   assert.throws(() => readFileSync(record), { code: 'ENOENT' })
 })
 
-test('pruning failure warns without failing the action', async t => {
+test('pruning failure warns without failing the action', async testContext => {
   process.env.PNPM_TEST_EXIT_CODE = '7'
   const output = []
   const write = process.stdout.write.bind(process.stdout)
-  t.mock.method(process.stdout, 'write', (chunk, ...args) => {
+  testContext.mock.method(process.stdout, 'write', (chunk, ...args) => {
     output.push(String(chunk))
     return write(chunk, ...args)
   })

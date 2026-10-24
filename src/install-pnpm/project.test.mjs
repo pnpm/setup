@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, test } from 'node:test'
+
 import { packageManagerManifest } from './project.ts'
 
 const fixtures = []
@@ -10,7 +11,7 @@ afterEach(() => {
   for (const directory of fixtures.splice(0)) fs.rmSync(directory, { recursive: true, force: true })
 })
 
-function workspace(settings = "packages: ['packages/*', '!packages/excluded/**']\n") {
+function workspace (settings = "packages: ['packages/*', '!packages/excluded/**']\n") {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'setup-project-')))
   fixtures.push(root)
   fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), settings)
@@ -18,7 +19,7 @@ function workspace(settings = "packages: ['packages/*', '!packages/excluded/**']
   return { root, manifest }
 }
 
-function project(root, relative) {
+function project (root, relative) {
   const directory = path.join(root, relative)
   fs.mkdirSync(directory, { recursive: true })
   const manifest = path.join(directory, 'package.json')

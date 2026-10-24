@@ -4,7 +4,7 @@
  * in the root segment. Cache APIs do not need the extended-length form, so
  * convert it back to a regular drive or UNC path.
  */
-export function removeWindowsExtendedPathPrefix(cachePath: string): string {
+export function removeWindowsExtendedPathPrefix (cachePath: string): string {
   const extendedPathPrefix = '\\\\?\\'
   if (!cachePath.startsWith(extendedPathPrefix)) return cachePath
 
@@ -15,5 +15,3 @@ export function removeWindowsExtendedPathPrefix(cachePath: string): string {
   }
   return pathWithoutPrefix
 }
-
-export default removeWindowsExtendedPathPrefix

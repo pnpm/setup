@@ -14,7 +14,7 @@ export const DEFAULT_REGISTRY = 'https://registry.npmjs.org/'
  * (`https://artifactory.example.com/api/npm/npm-remote`), and
  * `new URL('pnpm', base)` drops the last segment of a base without one.
  */
-export function resolveRegistry(input: string): string {
+export function resolveRegistry (input: string): string {
   const configured = input.trim() || DEFAULT_REGISTRY
 
   let url: URL

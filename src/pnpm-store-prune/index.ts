@@ -1,8 +1,9 @@
-import { warning, startGroup, endGroup } from '@actions/core'
+import { endGroup, startGroup, warning } from '@actions/core'
 import { exec } from '@actions/exec'
-import { Inputs } from '../inputs'
 
-export async function pruneStore(inputs: Inputs) {
+import { Inputs } from '../inputs/index.js'
+
+export async function pruneStore (inputs: Inputs): Promise<void> {
   if (!inputs.cache) {
     // Without caching, the store is ephemeral with the runner — no need to prune.
     return
@@ -20,5 +21,3 @@ export async function pruneStore(inputs: Inputs) {
     endGroup()
   }
 }
-
-export default pruneStore

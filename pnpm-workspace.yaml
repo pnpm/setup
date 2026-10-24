@@ -2,5 +2,8 @@ packages:
   - '.'
 allowBuilds:
   esbuild: true
+  # Its install script only fetches a native binding when the optional
+  # dependency that ships it is missing.
+  unrs-resolver: false
 minimumReleaseAgeExclude:
   - get-pnpm@0.0.1 || 0.0.6

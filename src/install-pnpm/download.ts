@@ -1,7 +1,8 @@
-import { chmod, copyFile, link, mkdir, rm } from 'fs/promises'
-import path from 'path'
-import semver from 'semver'
+import { chmod, copyFile, link, mkdir, rm } from 'node:fs/promises'
+import path from 'node:path'
+
 import { downloadPnpm as downloadVerifiedPnpm } from 'get-pnpm'
+import semver from 'semver'
 
 // The action installs pnpm's self-contained executable and uses `pnpm runtime`
 // to install a JavaScript runtime. Both are available from v11 onward, so that
@@ -22,7 +23,7 @@ const MIN_SUPPORTED_MAJOR = 11
  * that fail transiently. The `pnpx`, `pn` and `pnx` aliases are linked next to
  * the executable, which the binary dispatches on.
  */
-export async function downloadPnpm(spec: string, registry: string, destDir: string): Promise<{ version: string, binPath: string }> {
+export async function downloadPnpm (spec: string, registry: string, destDir: string): Promise<{ version: string, binPath: string }> {
   // An exact version can be rejected before anything is downloaded; anything
   // else is only known once get-pnpm has resolved it.
   const exact = semver.valid(spec)
@@ -44,18 +45,20 @@ export async function downloadPnpm(spec: string, registry: string, destDir: stri
 
   for (const alias of ['pnpx', 'pn', 'pnx']) {
     const aliasPath = path.join(destDir, process.platform === 'win32' ? `${alias}.exe` : alias)
+    /* eslint-disable no-await-in-loop -- three small file operations; running them in parallel buys nothing */
     await rm(aliasPath, { force: true })
     try {
       await link(pnpmBin, aliasPath)
     } catch {
       await copyFile(pnpmBin, aliasPath)
     }
+    /* eslint-enable no-await-in-loop */
   }
 
   return { version, binPath: pnpmBin }
 }
 
-function assertSupported(spec: string, version: string): void {
+function assertSupported (spec: string, version: string): void {
   if (semver.major(version) >= MIN_SUPPORTED_MAJOR) return
   throw new Error(`The requested pnpm version "${spec}" resolved to ${version}, but this action only installs pnpm v${MIN_SUPPORTED_MAJOR} or newer.
 This action downloads pnpm's self-contained release binary and uses \`pnpm runtime\` to install a JavaScript runtime; both are available from v${MIN_SUPPORTED_MAJOR} onward.

@@ -1,12 +1,13 @@
 import { isFeatureAvailable } from '@actions/cache'
 import { endGroup, startGroup, warning } from '@actions/core'
-import { Inputs } from '../inputs'
-import { RuntimeRequest } from '../install-runtime'
-import { finalizeCache, fingerprintRestoredStore, RestoredCache, runRestoreCache } from './run'
 
-export async function restoreCache(
+import { Inputs } from '../inputs/index.js'
+import { RuntimeRequest } from '../install-runtime/index.js'
+import { finalizeCache, fingerprintRestoredStore, RestoredCache, runRestoreCache } from './run.js'
+
+export async function restoreCache (
   inputs: Inputs,
-  runtimes: readonly RuntimeRequest[],
+  runtimes: readonly RuntimeRequest[]
 ): Promise<RestoredCache | undefined> {
   if (!isFeatureAvailable()) {
     // The lockfile verification cache is restored regardless of `cache`, so
@@ -25,4 +26,3 @@ export async function restoreCache(
 }
 
 export { finalizeCache, fingerprintRestoredStore }
-export default restoreCache

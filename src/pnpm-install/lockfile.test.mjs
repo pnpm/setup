@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, test } from 'node:test'
+
 import {
   chooseLockfileDir,
   findWorkspaceRoot,
@@ -16,13 +17,13 @@ afterEach(() => {
   for (const root of fixtures.splice(0)) fs.rmSync(root, { recursive: true, force: true })
 })
 
-function temporaryDirectory() {
+function temporaryDirectory () {
   const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'setup workspace & ')))
   fixtures.push(root)
   return root
 }
 
-function prepareWorkspace({ packages = "['packages/**']", settings = '' } = {}) {
+function prepareWorkspace ({ packages = "['packages/**']", settings = '' } = {}) {
   const root = temporaryDirectory()
   fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), `packages: ${packages}\n${settings}`)
   fs.writeFileSync(path.join(root, 'package.json'), '{"name":"root","version":"0.0.0"}')
@@ -30,7 +31,7 @@ function prepareWorkspace({ packages = "['packages/**']", settings = '' } = {}) 
     fs.mkdirSync(path.join(root, project), { recursive: true })
     fs.writeFileSync(
       path.join(root, project, 'package.json'),
-      `{"name":"${path.basename(project)}","version":"0.0.0"}`,
+      `{"name":"${path.basename(project)}","version":"0.0.0"}`
     )
   }
   return root
@@ -80,6 +81,6 @@ test('the lockfile directory follows sharedWorkspaceLockfile', () => {
   assert.equal(keepsLockfilePerProject(path.join(perProject, 'packages/pkg-1'), pnpmBin), true)
   assert.equal(
     lockfileDir(path.join(perProject, 'packages/pkg-1'), pnpmBin),
-    path.join(perProject, 'packages/pkg-1'),
+    path.join(perProject, 'packages/pkg-1')
   )
 })
