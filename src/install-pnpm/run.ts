@@ -18,22 +18,8 @@ export interface SelfInstallerResult {
 }
 
 export async function runSelfInstaller (inputs: Inputs): Promise<SelfInstallerResult> {
-  const { version, dest, packageJsonFile, registry } = inputs
-
-  const checkout = process.env.GITHUB_WORKSPACE
-  const manifest = checkout
-    ? version
-      ? path.resolve(checkout, packageJsonFile)
-      : selectPackageManagerManifest(path.resolve(checkout, packageJsonFile), checkout)
-    : undefined
-  const spec = readTargetVersion({ version, packageJsonFile: manifest ?? packageJsonFile })
-  const lockfileDirectory = !version && manifest && checkout
-    ? packageManagerLockfileDirectory(path.resolve(checkout, packageJsonFile), manifest)
-    : undefined
-  const lockedVersion = lockfileDirectory
-    ? readLockedPnpmVersion(lockfileDirectory, spec)
-    : undefined
-  const versionSpec = lockedVersion ?? spec
+  const { dest, registry } = inputs
+  const versionSpec = selectVersionSpec(inputs)
   info(`Downloading pnpm ${versionSpec} from ${registry}`)
 
   await rm(dest, { recursive: true, force: true })
@@ -59,6 +45,27 @@ export async function runSelfInstaller (inputs: Inputs): Promise<SelfInstallerRe
   exportVariable('PNPM_HOME', dest)
 
   return { binDest: dest, pnpmHome: dest }
+}
+
+/**
+ * The `version` input, or else the manifest's declaration, which a version
+ * locked in the lockfile narrows to the exact release.
+ */
+function selectVersionSpec ({ version, packageJsonFile }: Inputs): string {
+  const checkout = process.env.GITHUB_WORKSPACE
+  const manifest = checkout
+    ? version
+      ? path.resolve(checkout, packageJsonFile)
+      : selectPackageManagerManifest(path.resolve(checkout, packageJsonFile), checkout)
+    : undefined
+  const spec = readTargetVersion({ version, packageJsonFile: manifest ?? packageJsonFile })
+  const lockfileDirectory = !version && manifest && checkout
+    ? packageManagerLockfileDirectory(path.resolve(checkout, packageJsonFile), manifest)
+    : undefined
+  const lockedVersion = lockfileDirectory
+    ? readLockedPnpmVersion(lockfileDirectory, spec)
+    : undefined
+  return lockedVersion ?? spec
 }
 
 /**

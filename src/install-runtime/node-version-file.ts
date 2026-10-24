@@ -8,32 +8,39 @@ const NODE_VERSION_FILES = ['.node-version', '.nvmrc', '.tool-versions']
 
 export function readNodeVersionFile (inputs: Inputs): string | undefined {
   if (inputs.nodeVersionFile === false) return undefined
+  const workspace = workspaceDirectory(inputs)
+  if (!workspace) return undefined
 
-  const { GITHUB_WORKSPACE } = process.env
-  if (!GITHUB_WORKSPACE) {
-    if (!inputs.nodeVersionFile) return undefined
-    throw new Error('GITHUB_WORKSPACE is not set; unable to resolve `node-version-file`.')
-  }
-
+  const explicit = Boolean(inputs.nodeVersionFile)
   const candidates = inputs.nodeVersionFile ? [inputs.nodeVersionFile] : NODE_VERSION_FILES
   for (const candidate of candidates) {
-    const filePath = path.resolve(GITHUB_WORKSPACE, inputs.workingDirectory, candidate)
-    let contents: string
-    try {
-      contents = readFileSync(filePath, 'utf8')
-    } catch (error: unknown) {
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-        if (!inputs.nodeVersionFile) continue
-        throw new Error(`The specified Node version file does not exist: ${filePath}`, { cause: error })
-      }
-      throw error
-    }
-
+    const filePath = path.resolve(workspace, inputs.workingDirectory, candidate)
+    const contents = readVersionFile(filePath, explicit)
+    if (contents === undefined) continue
     const fileName = path.basename(filePath)
-    if (!inputs.nodeVersionFile && fileName === '.tool-versions' && !findToolVersion(cleanLines(contents))) continue
+    // A discovered .tool-versions that only lists other tools is passed over.
+    if (!explicit && fileName === '.tool-versions' && !findToolVersion(cleanLines(contents))) continue
     return parseNodeVersionFile(contents, fileName)
   }
   return undefined
+}
+
+function workspaceDirectory (inputs: Inputs): string | undefined {
+  const { GITHUB_WORKSPACE } = process.env
+  if (GITHUB_WORKSPACE) return GITHUB_WORKSPACE
+  if (!inputs.nodeVersionFile) return undefined
+  throw new Error('GITHUB_WORKSPACE is not set; unable to resolve `node-version-file`.')
+}
+
+/** A missing file is skipped while discovering, but fails when it was named explicitly. */
+function readVersionFile (filePath: string, explicit: boolean): string | undefined {
+  try {
+    return readFileSync(filePath, 'utf8')
+  } catch (error: unknown) {
+    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error
+    if (!explicit) return undefined
+    throw new Error(`The specified Node version file does not exist: ${filePath}`, { cause: error })
+  }
 }
 
 export function parseNodeVersionFile (contents: string, fileName = 'Node version file'): string {
@@ -75,14 +82,7 @@ function normalizeNodeVersion (version: string, fileName: string): string {
 
   const lowered = version.toLowerCase()
   if (lowered === 'node' || lowered === 'stable') return 'latest'
-  if (lowered === 'lts/*') return 'lts'
-  if (lowered.startsWith('lts/')) {
-    const ltsName = version.slice(4)
-    if (!ltsName || ltsName.includes('/')) {
-      throw new Error(`${fileName} contains an invalid Node.js version selector: ${version}`)
-    }
-    return ltsName
-  }
+  if (lowered.startsWith('lts/')) return normalizeLtsSelector(version, fileName)
 
   const unsupportedAlias = ['system', 'current', 'iojs', 'unstable'].includes(lowered)
   if (unsupportedAlias || /^(?:path|ref):/i.test(version)) {
@@ -90,4 +90,14 @@ function normalizeNodeVersion (version: string, fileName: string): string {
   }
 
   return /^v\d/.test(version) ? version.slice(1) : version
+}
+
+/** `lts/*` is the latest LTS line; `lts/<codename>` names one. */
+function normalizeLtsSelector (version: string, fileName: string): string {
+  const ltsName = version.slice('lts/'.length)
+  if (ltsName === '*') return 'lts'
+  if (!ltsName || ltsName.includes('/')) {
+    throw new Error(`${fileName} contains an invalid Node.js version selector: ${version}`)
+  }
+  return ltsName
 }

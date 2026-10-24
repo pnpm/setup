@@ -27,22 +27,7 @@ export interface RuntimeRequest {
 }
 
 export function resolveRuntimeRequests (inputs: Inputs): RuntimeRequest[] {
-  if (inputs.runtime) {
-    const { name } = inputs.runtime
-    if (inputs.nodeVersionFile && (name !== 'node' || inputs.runtime.version)) {
-      warning(
-        name === 'node'
-          ? '`node-version-file` is ignored because `runtime` already includes a Node.js version.'
-          : `\`node-version-file\` is ignored because \`runtime\` explicitly selects ${name}.`
-      )
-    }
-    const version = inputs.runtime.version
-      ?? (name === 'node' && inputs.nodeVersionFile ? readNodeVersionFile(inputs) : undefined)
-      ?? readDevEngineVersion(inputs, name)
-      ?? (name === 'node' ? readNodeVersionFile(inputs) : undefined)
-      ?? defaultVersionFor(name)
-    return [{ name, version }]
-  }
+  if (inputs.runtime) return [resolveRequestedRuntime(inputs, inputs.runtime)]
 
   const runtimes = readDevEngineRuntimes(inputs)
   if (!inputs.nodeVersionFile && runtimes.some(runtime => runtime.name === 'node')) return runtimes
@@ -53,6 +38,26 @@ export function resolveRuntimeRequests (inputs: Inputs): RuntimeRequest[] {
     { name: 'node', version: nodeVersion },
     ...runtimes.filter(runtime => runtime.name !== 'node'),
   ]
+}
+
+/**
+ * A version in `runtime` wins. Otherwise an explicit `node-version-file`,
+ * then `devEngines.runtime`, then a discovered version file, then the default.
+ */
+function resolveRequestedRuntime (inputs: Inputs, runtime: NonNullable<Inputs['runtime']>): RuntimeRequest {
+  const { name } = runtime
+  const isNode = name === 'node'
+  if (inputs.nodeVersionFile && (!isNode || runtime.version)) {
+    warning(isNode
+      ? '`node-version-file` is ignored because `runtime` already includes a Node.js version.'
+      : `\`node-version-file\` is ignored because \`runtime\` explicitly selects ${name}.`)
+  }
+  const version = runtime.version
+    ?? (isNode && inputs.nodeVersionFile ? readNodeVersionFile(inputs) : undefined)
+    ?? readDevEngineVersion(inputs, name)
+    ?? (isNode ? readNodeVersionFile(inputs) : undefined)
+    ?? defaultVersionFor(name)
+  return { name, version }
 }
 
 export async function installRuntime (
