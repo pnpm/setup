@@ -44,10 +44,11 @@ range. For workspace members, setup finds the nearest `pnpm-workspace.yaml`
 within the checkout, checks its `packages` patterns and exclusions, and reads
 the root manifest and shared lockfile. A member whose root declares no pnpm
 version keeps its own declaration. With `sharedWorkspaceLockfile: false`,
-the member's lockfile supplies the locked version. Excluded projects keep their own manifest and
-lockfile. An explicit `version` input still takes precedence. Custom lockfile
-locations and workspace roots outside the checkout retain the existing
-version-selection behavior. Frozen installs still validate the lockfile
+the member's lockfile supplies the locked version. When `pnpm-workspace.yaml`
+sets `lockfileDir`, the lockfile is read from there, with a relative path
+resolved against the workspace root as pnpm does. Excluded projects keep their own manifest and
+lockfile. An explicit `version` input still takes precedence. Workspace roots
+outside the checkout retain the existing version-selection behavior. Frozen installs still validate the lockfile
 against the manifest through pnpm.
 
 ## Outputs
@@ -283,7 +284,7 @@ install that was never going to succeed.
 Where it looks is where pnpm reads one: at the workspace root when
 `working-directory` is one of the workspace's projects, and in
 `working-directory` itself when it is not, or when the workspace sets
-`sharedWorkspaceLockfile: false`. The action asks the selected pnpm version
+`sharedWorkspaceLockfile: false`. A `lockfileDir` setting overrides both. The action asks the selected pnpm version
 whether a project belongs to a workspace, so excluded projects follow that
 version's installation behavior.
 

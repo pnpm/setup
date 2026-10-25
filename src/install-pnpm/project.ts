@@ -70,11 +70,23 @@ function inside (parent: string, directory: string): boolean {
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
 }
 
-/** The inherited manifest and the dependency lockfile can belong to different directories. */
+/**
+ * The inherited manifest and the dependency lockfile can belong to different
+ * directories. An explicit `lockfileDir` wins, and, as pnpm reads it, a
+ * relative one names a directory of the workspace. Otherwise a workspace keeps
+ * one lockfile at its root unless `sharedWorkspaceLockfile` is off.
+ */
 export function packageManagerLockfileDirectory (manifest: string, selectedManifest: string): string {
   const project = path.dirname(manifest)
   const root = path.dirname(selectedManifest)
+  const workspace = readWorkspaceSettings(root)
+  if (typeof workspace?.lockfileDir === 'string') return path.resolve(root, workspace.lockfileDir)
   if (project === root) return project
-  const workspace = parse(readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'), { merge: true })
   return workspace?.sharedWorkspaceLockfile === false ? project : root
+}
+
+function readWorkspaceSettings (root: string): Record<string, unknown> | undefined {
+  const workspaceFile = path.join(root, 'pnpm-workspace.yaml')
+  if (!existsSync(workspaceFile)) return undefined
+  return parse(readFileSync(workspaceFile, 'utf8'), { merge: true }) ?? undefined
 }

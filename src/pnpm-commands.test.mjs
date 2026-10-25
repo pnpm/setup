@@ -58,7 +58,12 @@ writeFileSync(path.join(project, 'root'), `
     process.exitCode = 1
   }
 `)
-writeFileSync(path.join(project, 'config'), 'console.log(process.env.PNPM_TEST_SHARED_LOCKFILE || \'true\')')
+// Answers `pnpm config get <key>` for the settings the action reads.
+writeFileSync(path.join(project, 'config'), `
+  console.log(process.argv[3] === 'lockfileDir'
+    ? process.env.PNPM_TEST_LOCKFILE_DIR || 'undefined'
+    : process.env.PNPM_TEST_SHARED_LOCKFILE || 'true')
+`)
 const shimScript = path.join(dest, 'record.cjs')
 writeFileSync(shimScript, recorder)
 const quoteShell = value => `'${value.replaceAll("'", "'\\''")}'`
@@ -93,6 +98,7 @@ beforeEach(testContext => {
     PNPM_TEST_EXIT_CODE: '0',
     PNPM_TEST_WORKSPACE_ROOT: '',
     PNPM_TEST_SHARED_LOCKFILE: 'true',
+    PNPM_TEST_LOCKFILE_DIR: '',
   })
   // Simulate the PATH prepared by setup, with self-update's shim first.
   const pathKey = Object.keys(process.env).find(key => key.toUpperCase() === 'PATH') ?? 'PATH'
@@ -178,6 +184,24 @@ test('a workspace with per-project lockfiles installs using the member lockfile'
   process.env.PNPM_TEST_SHARED_LOCKFILE = 'false'
   runPnpmInstall(getInputs())
   assert.deepEqual(JSON.parse(readFileSync(record, 'utf8')).args, ['--frozen-lockfile'])
+})
+
+test('a workspace with lockfileDir requires, installs from and caches the lockfile there', testContext => {
+  process.env.PNPM_TEST_WORKSPACE_ROOT = root
+  process.env.PNPM_TEST_LOCKFILE_DIR = 'locks'
+  const locks = path.join(root, 'locks')
+  mkdirSync(locks, { recursive: true })
+  testContext.after(() => rmSync(locks, { recursive: true, force: true }))
+
+  // The root lockfile is not the one pnpm reads.
+  runPnpmInstall(getInputs())
+  assert.equal(process.exitCode, 1)
+  assert.throws(() => readFileSync(record), { code: 'ENOENT' })
+
+  writeFileSync(path.join(locks, 'pnpm-lock.yaml'), '')
+  runPnpmInstall(getInputs())
+  assert.deepEqual(JSON.parse(readFileSync(record, 'utf8')).args, ['--frozen-lockfile'])
+  assert.equal(resolveCacheDependencyPath(getInputs()), path.join('locks', 'pnpm-lock.yaml'))
 })
 
 test('pruning awaits the self-updated shim ahead of the original executable on PATH', async () => {

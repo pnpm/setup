@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, test } from 'node:test'
 
-import { packageManagerManifest } from './project.ts'
+import { packageManagerLockfileDirectory, packageManagerManifest } from './project.ts'
 
 const fixtures = []
 afterEach(() => {
@@ -114,4 +114,32 @@ test('invalid workspace patterns fail with a clear error', () => {
   const { root } = workspace('packages: [42]\n')
   const child = project(root, 'packages/app')
   assert.throws(() => packageManagerManifest(child, root), /Invalid packages patterns/)
+})
+
+test('the lockfile directory follows the workspace lockfile settings', () => {
+  const { root, manifest } = workspace("packages: ['packages/*']\n")
+  const member = project(root, 'packages/app')
+  assert.equal(packageManagerLockfileDirectory(member, manifest), root)
+  assert.equal(packageManagerLockfileDirectory(manifest, manifest), root)
+
+  fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), "packages: ['packages/*']\nsharedWorkspaceLockfile: false\n")
+  assert.equal(packageManagerLockfileDirectory(member, manifest), path.dirname(member))
+})
+
+test('an explicit lockfileDir is resolved against the workspace root', () => {
+  const { root, manifest } = workspace("packages: ['packages/*']\nlockfileDir: locks\n")
+  const member = project(root, 'packages/app')
+  assert.equal(packageManagerLockfileDirectory(member, manifest), path.join(root, 'locks'))
+  assert.equal(packageManagerLockfileDirectory(manifest, manifest), path.join(root, 'locks'))
+
+  // It wins over a lockfile per project, as in pnpm.
+  fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), "packages: ['packages/*']\nsharedWorkspaceLockfile: false\nlockfileDir: ../locks\n")
+  assert.equal(packageManagerLockfileDirectory(member, manifest), path.join(path.dirname(root), 'locks'))
+})
+
+test('a project without pnpm-workspace.yaml reads its own lockfile', () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'setup-project-')))
+  fixtures.push(root)
+  const manifest = project(root, '.')
+  assert.equal(packageManagerLockfileDirectory(manifest, manifest), root)
 })

@@ -6,6 +6,7 @@ import { afterEach, test } from 'node:test'
 
 import {
   chooseLockfileDir,
+  configuredLockfileDir,
   findWorkspaceRoot,
   keepsLockfilePerProject,
   lockfileDir,
@@ -83,4 +84,21 @@ test('the lockfile directory follows sharedWorkspaceLockfile', () => {
     lockfileDir(path.join(perProject, 'packages/pkg-1'), pnpmBin),
     path.join(perProject, 'packages/pkg-1')
   )
+})
+
+test('an explicit lockfileDir wins and is resolved against the workspace root', () => {
+  const root = path.resolve('/workspace')
+  const member = path.join(root, 'packages/app')
+  assert.equal(chooseLockfileDir(member, root, false, 'locks'), path.join(root, 'locks'))
+  assert.equal(chooseLockfileDir(member, root, true, 'locks'), path.join(root, 'locks'))
+  assert.equal(chooseLockfileDir(member, root, false, path.resolve('/elsewhere')), path.resolve('/elsewhere'))
+})
+
+test('the lockfile directory follows lockfileDir as pnpm reports it', () => {
+  const workspace = prepareWorkspace({ settings: 'lockfileDir: locks\n' })
+  const member = path.join(workspace, 'packages/pkg-1')
+
+  assert.equal(configuredLockfileDir(member, pnpmBin), 'locks')
+  assert.equal(lockfileDir(member, pnpmBin), path.join(workspace, 'locks'))
+  assert.equal(configuredLockfileDir(path.join(prepareWorkspace(), 'packages/pkg-1'), pnpmBin), undefined)
 })

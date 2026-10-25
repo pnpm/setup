@@ -21,23 +21,36 @@ export function keepsLockfilePerProject (from: string, pnpmBin: string): boolean
 }
 
 /**
+ * The `lockfileDir` setting as pnpm reports it: as written, so a relative one is
+ * still relative to the workspace root, and `undefined` when it is not set.
+ */
+export function configuredLockfileDir (from: string, pnpmBin: string): string | undefined {
+  const value = askPnpm(from, pnpmBin, ['config', 'get', 'lockfileDir'])
+  return value && value !== 'undefined' ? value : undefined
+}
+
+/**
  * The directory an install in `from` reads `pnpm-lock.yaml` from.
  *
- * A workspace keeps one lockfile at its root, so a project it contains installs
- * from there rather than from beside itself — which is why a lockfile sitting
- * in the project directory is not evidence that the install has one.
+ * An explicit `lockfileDir` wins. Otherwise a workspace keeps one lockfile at
+ * its root, so a project it contains installs from there rather than from
+ * beside itself — which is why a lockfile sitting in the project directory is
+ * not evidence that the install has one.
  */
 export function chooseLockfileDir (
   from: string,
   workspaceRoot: string | undefined,
-  perProjectLockfile: boolean
+  perProjectLockfile: boolean,
+  configured?: string
 ): string {
+  if (configured) return path.resolve(workspaceRoot ?? from, configured)
   return workspaceRoot && !perProjectLockfile ? workspaceRoot : from
 }
 
-/** [`chooseLockfileDir`] with both answers asked of the installed pnpm. */
+/** [`chooseLockfileDir`] with every answer asked of the installed pnpm. */
 export function lockfileDir (from: string, pnpmBin: string): string {
   const workspaceRoot = findWorkspaceRoot(from, pnpmBin)
-  const perProjectLockfile = workspaceRoot !== undefined && keepsLockfilePerProject(from, pnpmBin)
-  return chooseLockfileDir(from, workspaceRoot, perProjectLockfile)
+  const configured = configuredLockfileDir(from, pnpmBin)
+  const perProjectLockfile = !configured && workspaceRoot !== undefined && keepsLockfilePerProject(from, pnpmBin)
+  return chooseLockfileDir(from, workspaceRoot, perProjectLockfile, configured)
 }
