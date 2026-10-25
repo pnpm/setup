@@ -143,3 +143,26 @@ test('a project without pnpm-workspace.yaml reads its own lockfile', () => {
   const manifest = project(root, '.')
   assert.equal(packageManagerLockfileDirectory(manifest, manifest), root)
 })
+
+test('a lockfileDir delegated to an included file is measured from that file', () => {
+  const { root, manifest } = workspace("packages: ['packages/*']\ninclude:\n  ./cfg/locks.yaml:\n    - lockfileDir\n")
+  const member = project(root, 'packages/app')
+  fs.mkdirSync(path.join(root, 'cfg'))
+  fs.writeFileSync(path.join(root, 'cfg/locks.yaml'), 'lockfileDir: locks\n')
+  assert.equal(packageManagerLockfileDirectory(member, manifest), path.join(root, 'cfg/locks'))
+  assert.equal(packageManagerLockfileDirectory(manifest, manifest), path.join(root, 'cfg/locks'))
+
+  fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), "packages: ['packages/*']\ninclude:\n  ./cfg/locks.yaml: '*'\n")
+  assert.equal(packageManagerLockfileDirectory(member, manifest), path.join(root, 'cfg/locks'))
+})
+
+test('only settings an include delegates are read from the included file', () => {
+  const { root, manifest } = workspace("packages: ['packages/*']\ninclude:\n  ./cfg/policies.yaml:\n    - minimumReleaseAge\n")
+  const member = project(root, 'packages/app')
+  fs.mkdirSync(path.join(root, 'cfg'))
+  fs.writeFileSync(path.join(root, 'cfg/policies.yaml'), 'lockfileDir: locks\nsharedWorkspaceLockfile: false\n')
+  assert.equal(packageManagerLockfileDirectory(member, manifest), root)
+
+  fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), "packages: ['packages/*']\ninclude:\n  ./cfg/policies.yaml:\n    - sharedWorkspaceLockfile\n")
+  assert.equal(packageManagerLockfileDirectory(member, manifest), path.dirname(member))
+})

@@ -72,21 +72,54 @@ function inside (parent: string, directory: string): boolean {
 
 /**
  * The inherited manifest and the dependency lockfile can belong to different
- * directories. An explicit `lockfileDir` wins, and, as pnpm reads it, a
- * relative one names a directory of the workspace. Otherwise a workspace keeps
- * one lockfile at its root unless `sharedWorkspaceLockfile` is off.
+ * directories. An explicit `lockfileDir` wins, its relative path measured from
+ * the file that sets it, as pnpm does. Otherwise a workspace keeps one lockfile
+ * at its root unless `sharedWorkspaceLockfile` is off.
  */
 export function packageManagerLockfileDirectory (manifest: string, selectedManifest: string): string {
   const project = path.dirname(manifest)
   const root = path.dirname(selectedManifest)
-  const workspace = readWorkspaceSettings(root)
-  if (typeof workspace?.lockfileDir === 'string') return path.resolve(root, workspace.lockfileDir)
+  const lockfileDir = readWorkspaceSetting(root, 'lockfileDir')
+  if (typeof lockfileDir?.value === 'string') return path.resolve(lockfileDir.directory, lockfileDir.value)
   if (project === root) return project
-  return workspace?.sharedWorkspaceLockfile === false ? project : root
+  return readWorkspaceSetting(root, 'sharedWorkspaceLockfile')?.value === false ? project : root
 }
 
-function readWorkspaceSettings (root: string): Record<string, unknown> | undefined {
-  const workspaceFile = path.join(root, 'pnpm-workspace.yaml')
-  if (!existsSync(workspaceFile)) return undefined
-  return parse(readFileSync(workspaceFile, 'utf8'), { merge: true }) ?? undefined
+interface WorkspaceSetting {
+  readonly value: unknown
+  /** The directory of the file that sets it, which its relative paths are measured from. */
+  readonly directory: string
+}
+
+/**
+ * A setting of the workspace at `root`, from pnpm-workspace.yaml or from a local
+ * file its `include` delegates the setting to. A config dependency can be
+ * delegated settings too, but it is not installed before pnpm is.
+ */
+function readWorkspaceSetting (root: string, name: string): WorkspaceSetting | undefined {
+  const workspace = readYamlMapping(path.join(root, 'pnpm-workspace.yaml'))
+  if (workspace === undefined) return undefined
+  if (name in workspace) return { value: workspace[name], directory: root }
+  for (const file of delegatedFiles(root, workspace.include, name)) {
+    const settings = readYamlMapping(file)
+    if (settings !== undefined && name in settings) return { value: settings[name], directory: path.dirname(file) }
+  }
+  return undefined
+}
+
+/** The local files `include` delegates `name` to, listed by name or with "*". */
+function delegatedFiles (root: string, include: unknown, name: string): string[] {
+  if (include === null || typeof include !== 'object' || Array.isArray(include)) return []
+  return Object.entries(include)
+    .filter(([source, delegation]) => /^\.\.?\//.test(source) &&
+      (delegation === '*' || (Array.isArray(delegation) && delegation.includes(name))))
+    .map(([source]) => path.resolve(root, source))
+}
+
+function readYamlMapping (file: string): Record<string, unknown> | undefined {
+  if (!existsSync(file)) return undefined
+  const value: unknown = parse(readFileSync(file, 'utf8'), { merge: true })
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
 }

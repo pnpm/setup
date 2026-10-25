@@ -45,8 +45,9 @@ within the checkout, checks its `packages` patterns and exclusions, and reads
 the root manifest and shared lockfile. A member whose root declares no pnpm
 version keeps its own declaration. With `sharedWorkspaceLockfile: false`,
 the member's lockfile supplies the locked version. When `pnpm-workspace.yaml`
-sets `lockfileDir`, the lockfile is read from there, with a relative path
-resolved against the workspace root as pnpm does. Excluded projects keep their own manifest and
+sets `lockfileDir`, or a local file its `include` delegates the setting to,
+the lockfile is read from there, with a relative path measured from the file
+that sets it, as pnpm does. Excluded projects keep their own manifest and
 lockfile. An explicit `version` input still takes precedence. Workspace roots
 outside the checkout retain the existing version-selection behavior. Frozen installs still validate the lockfile
 against the manifest through pnpm.
