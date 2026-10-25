@@ -14,7 +14,9 @@ const { outputFiles } = await build({
   plugins: [{
     name: 'installer-fixtures',
     setup (build) {
-      build.onResolve({ filter: /^(@actions\/core|\.\/download\.js|node:child_process)$/ }, args => ({ path: args.path, namespace: 'fixture' }))
+      // Only run.ts's own child_process: get-pnpm, bundled in, imports it too.
+      build.onResolve({ filter: /^(@actions\/core|\.\/download\.js|node:child_process)$/ }, args =>
+        args.path === 'node:child_process' && !args.importer.endsWith('run.ts') ? undefined : { path: args.path, namespace: 'fixture' })
       build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents:
         args.path === '@actions/core' ? 'export const info = () => {}; export const addPath = () => {}; export const exportVariable = () => {}' :
           args.path === './download.js' ? `
@@ -78,13 +80,12 @@ importers: {}
   assert.equal(globalThis.selectedSpec, '12.8.1')
   await bundled.exports.runSelfInstaller({ ...inputs, packageJsonFile: 'packages/excluded/package.json' })
   assert.equal(globalThis.selectedSpec, '12.8.2')
+  // pnpm reads the root's lockfile for the pin even when each project keeps its own.
   writeFileSync(path.join(root, 'pnpm-workspace.yaml'), "packages: ['packages/*']\nsharedWorkspaceLockfile: false\n")
   writeFileSync(path.join(root, 'packages/app/pnpm-lock.yaml'), '---\nimporters:\n  .:\n    packageManagerDependencies:\n      pnpm:\n        version: 12.7.0\n')
   await bundled.exports.runSelfInstaller({ ...inputs, packageJsonFile: 'packages/app/package.json' })
-  assert.equal(globalThis.selectedSpec, '12.7.0')
+  assert.equal(globalThis.selectedSpec, '12.8.1')
   rmSync(path.join(root, 'packages/app/pnpm-lock.yaml'))
-  await bundled.exports.runSelfInstaller({ ...inputs, packageJsonFile: 'packages/app/package.json' })
-  assert.equal(globalThis.selectedSpec, '>=12.0.0 <13.0.0')
   // The pin is read from `lockfileDir`, for a member and for the root itself.
   writeFileSync(path.join(root, 'pnpm-workspace.yaml'), "packages: ['packages/*']\nlockfileDir: locks\n")
   mkdirSync(path.join(root, 'locks'))

@@ -5,12 +5,11 @@ import path from 'node:path'
 import util from 'node:util'
 
 import { addPath, exportVariable, info } from '@actions/core'
+import { readProjectPin } from 'get-pnpm'
 import { parse as parseYaml } from 'yaml'
 
 import { Inputs } from '../inputs/index.js'
 import { downloadPnpm } from './download.js'
-import { readLockedPnpmVersion } from './locked-version.js'
-import { packageManagerLockfileDirectory, packageManagerManifest } from './project.js'
 
 export interface SelfInstallerResult {
   binDest: string
@@ -48,109 +47,56 @@ export async function runSelfInstaller (inputs: Inputs): Promise<SelfInstallerRe
 }
 
 /**
- * The `version` input, or else the manifest's declaration, which a version
- * locked in the lockfile narrows to the exact release.
+ * The `version` input, or else the version the project pins, read the way
+ * pnpm reads it to switch versions; see get-pnpm's `readProjectPin`.
  */
 function selectVersionSpec ({ version, packageJsonFile }: Inputs): string {
-  const checkout = process.env.GITHUB_WORKSPACE
-  const manifest = checkout
-    ? version
-      ? path.resolve(checkout, packageJsonFile)
-      : selectPackageManagerManifest(path.resolve(checkout, packageJsonFile), checkout)
-    : undefined
-  const spec = readTargetVersion({ version, packageJsonFile: manifest ?? packageJsonFile })
-  const lockfileDirectory = !version && manifest && checkout
-    ? packageManagerLockfileDirectory(path.resolve(checkout, packageJsonFile), manifest)
-    : undefined
-  const lockedVersion = lockfileDirectory
-    ? readLockedPnpmVersion(lockfileDirectory, spec)
-    : undefined
-  return lockedVersion ?? spec
-}
-
-/**
- * A workspace root that declares no pnpm version leaves the member's own
- * declaration in charge, as it was before members inherited from the root.
- */
-function selectPackageManagerManifest (projectManifest: string, checkout: string): string {
-  const rootManifest = packageManagerManifest(projectManifest, checkout)
-  if (rootManifest === projectManifest) return rootManifest
-  const { packageManager, devEngines } = readPnpmDeclaration(rootManifest)
-  const declaresPnpm = (devEngines?.packageManager?.name === 'pnpm' && Boolean(devEngines.packageManager.version)) ||
-    (typeof packageManager === 'string' && packageManager.startsWith('pnpm@'))
-  return declaresPnpm ? rootManifest : projectManifest
-}
-
-interface PnpmDeclaration {
-  readonly packageManager?: string
-  readonly devEngines?: { packageManager?: { name?: string; version?: string } }
-}
-
-function readPnpmDeclaration (packageJsonFile: string): PnpmDeclaration {
-  const { GITHUB_WORKSPACE } = process.env
-  if (!GITHUB_WORKSPACE) return {}
-  try {
-    const content = readFileSync(path.resolve(GITHUB_WORKSPACE, packageJsonFile), 'utf8');
-    const manifest = packageJsonFile.endsWith('.yaml')
-      ? parseYaml(content, { merge: true })
-      : JSON.parse(content)
-    return { packageManager: manifest.packageManager, devEngines: manifest.devEngines }
-  } catch (error: unknown) {
-    // Swallow error if package.json doesn't exist in root
-    if (!util.types.isNativeError(error) || !('code' in error) || error.code !== 'ENOENT') throw error
-    return {}
-  }
-}
-
-function readTargetVersion (opts: {
-  readonly version?: string | undefined
-  readonly packageJsonFile: string
-}): string {
-  const { version, packageJsonFile } = opts
-  const { GITHUB_WORKSPACE } = process.env
-  const { packageManager, devEngines } = readPnpmDeclaration(packageJsonFile)
-
-  // packageManager is always exact `pnpm@<version>[+<integrity>]` per spec.
-  // Strip the integrity hash before resolving.
-  const packageManagerVersion =
-    typeof packageManager === 'string' && packageManager.startsWith('pnpm@')
-      ? packageManager.slice('pnpm@'.length).split('+')[0]
-      : undefined
-
   if (version) {
-    if (packageManagerVersion && packageManagerVersion !== version) {
-      throw new Error(`Multiple versions of pnpm specified:
-  - version ${version} in the GitHub Action config with the key "version"
-  - version ${packageManager} in the package.json with the key "packageManager"
-Remove one of these versions to avoid version mismatch errors like ERR_PNPM_BAD_PM_VERSION`)
-    }
-
+    assertNoOtherPackageManagerVersion(version, packageJsonFile)
     return version
   }
-
-  // devEngines.packageManager takes priority over packageManager, matching
-  // pnpm's getWantedPackageManager logic. Both exact versions and semver
-  // ranges are accepted.
-  if (devEngines?.packageManager?.name === 'pnpm' && devEngines.packageManager.version) {
-    return devEngines.packageManager.version
-  }
-
-  if (packageManagerVersion) {
-    return packageManagerVersion
-  }
-
-  if (!GITHUB_WORKSPACE) {
+  const checkout = process.env.GITHUB_WORKSPACE
+  if (!checkout) {
     throw new Error(`No workspace is found.
 If you've intended to let pnpm/setup read preferred pnpm version from the "packageManager" field in the package.json file,
 please run the actions/checkout before pnpm/setup.
 Otherwise, please specify the pnpm version in the action configuration.`)
   }
-
-  throw new Error(`No pnpm version is specified.
+  const pin = readProjectPin(path.dirname(path.resolve(checkout, packageJsonFile)), { root: checkout })
+  if (pin == null) {
+    throw new Error(`No pnpm version is specified.
 Please specify it by one of the following ways:
   - in the GitHub Action config with the key "version"
   - in the package.json with the key "packageManager"
   - in the package.json with the key "devEngines.packageManager"`)
+  }
+  return pin.lockedVersion ?? pin.spec
+}
+
+function assertNoOtherPackageManagerVersion (version: string, packageJsonFile: string): void {
+  const packageManager = readPackageManager(packageJsonFile)
+  if (!packageManager?.startsWith('pnpm@')) return
+  const packageManagerVersion = packageManager.slice('pnpm@'.length).split('+')[0]
+  if (!packageManagerVersion || packageManagerVersion === version) return
+  throw new Error(`Multiple versions of pnpm specified:
+  - version ${version} in the GitHub Action config with the key "version"
+  - version ${packageManager} in the package.json with the key "packageManager"
+Remove one of these versions to avoid version mismatch errors like ERR_PNPM_BAD_PM_VERSION`)
+}
+
+function readPackageManager (packageJsonFile: string): string | undefined {
+  const { GITHUB_WORKSPACE } = process.env
+  if (!GITHUB_WORKSPACE) return undefined
+  try {
+    const content = readFileSync(path.resolve(GITHUB_WORKSPACE, packageJsonFile), 'utf8')
+    const manifest = packageJsonFile.endsWith('.yaml')
+      ? parseYaml(content, { merge: true })
+      : JSON.parse(content)
+    return typeof manifest?.packageManager === 'string' ? manifest.packageManager : undefined
+  } catch (error: unknown) {
+    if (!util.types.isNativeError(error) || !('code' in error) || error.code !== 'ENOENT') throw error
+    return undefined
+  }
 }
 
 function readVersion (pnpmBin: string): Promise<string> {
