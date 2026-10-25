@@ -23,7 +23,7 @@ Only one version of each runtime can be installed globally. If a runtime name is
 |------|-------------|
 | `version` | Version of pnpm to install: an exact version, a semver range (`^12.0.0`), or a dist-tag (`next-12`). Must resolve to v11 or newer. Optional when `packageManager` or `devEngines.packageManager` is set in `package.json`. |
 | `registry` | npm registry to resolve and download pnpm from, e.g. a mirror. Defaults to `https://registry.npmjs.org/`. See [Registry mirrors](#registry-mirrors). |
-| `dest` | Where to store pnpm files. Defaults to `~/setup-pnpm`. |
+| `dest` | Directory used as `PNPM_HOME`, where runtimes and global binaries are installed. The `pnpm` executable itself is kept in the runner's tool cache (or in `dest` when `RUNNER_TOOL_CACHE` is not set). Defaults to `~/setup-pnpm`. |
 | `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime`, then to `lts` (for `node`) / `latest`. Node.js also supports version files with the precedence described below. If the input itself is omitted, installs every entry in `devEngines.runtime` and adds Node.js when a version file supplies it. |
 | `node-version-file` | Optional Node.js version file path, relative to `working-directory`. By default, checks `.node-version`, `.nvmrc`, then `.tool-versions` when the manifest does not declare Node.js. Set to `false` to disable file detection. An explicit path overrides the manifest; an explicit version in `runtime` overrides both. |
 | `cache` | Cache the pnpm store directory and restore it before installing the runtimes. Default: `false`. |
@@ -57,7 +57,7 @@ against the manifest through pnpm.
 | Name | Description |
 |------|-------------|
 | `dest` | Expanded path of `dest`. |
-| `bin-dest` | Directory containing the `pnpm` / `pnpx` binaries. |
+| `bin-dest` | Directory containing the `pnpm` / `pnpx` binaries: a directory in the runner's tool cache, or `dest` when `RUNNER_TOOL_CACHE` is not set. |
 | `runtime-name` | Name of the first installed runtime, or empty string if none was installed. |
 | `runtime-version` | Resolved version of the first installed runtime, or empty string if none was installed. |
 | `runtimes` | JSON array of every installed runtime in declaration order, as `{ "name": string, "version": string }` objects. Returns `[]` when none were installed. |
@@ -396,8 +396,10 @@ For jobs that only need pnpm itself — e.g. `pnpm audit`, lockfile-only regener
 
 ## How it works
 
-1. The action hands the requested version (exact, range, or dist-tag) to [`get-pnpm`](https://github.com/pnpm/get.pnpm.io/tree/main/get-pnpm), which resolves it against the registry and downloads the self-contained executable for the runner's platform. The download is checked against the checksum the registry published for it, and that checksum against npm's signature. Requests that fail transiently (a reset connection, a timeout, a 429 or 5xx) are retried. The `pnpm` executable (and, for pnpm builds that need it, its bundled `dist/`) lands in `dest`, next to the `pnpx`, `pn`, and `pnx` aliases. No Node.js or npm is involved.
-2. `PNPM_HOME` is exported and `dest` plus `$PNPM_HOME/bin` are added to `PATH`.
+1. The action hands the requested version (exact, range, or dist-tag) to [`get-pnpm`](https://github.com/pnpm/get.pnpm.io/tree/main/get-pnpm), which resolves it against the registry and downloads the self-contained executable for the runner's platform. The download is checked against the checksum the registry published for it, and that checksum against npm's signature. Requests that fail transiently (a reset connection, a timeout, a 429 or 5xx) are retried. The `pnpm` executable (and, for pnpm builds that need it, its bundled `dist/`) is added to the runner's [tool cache](https://github.com/actions/toolkit/tree/main/packages/tool-cache) under `$RUNNER_TOOL_CACHE/pnpm/<version>/<arch>`, next to the `pnpx`, `pn`, and `pnx` aliases. When an exact version is requested and the tool cache already has it, nothing is downloaded. A range or dist-tag is resolved by downloading it, so it is downloaded on every run. When `RUNNER_TOOL_CACHE` is not set, the executable lands in `dest` instead. No Node.js or npm is involved.
+2. `PNPM_HOME` is exported as `dest`, and the tool cache directory, `dest`, and `$PNPM_HOME/bin` are added to `PATH`.
+
+   GitHub-hosted runners start every job with an empty tool cache, so there pnpm is still downloaded on each run. Self-hosted runners keep their tool cache between jobs and reuse the cached copy.
 3. The action runs `pnpm runtime set <name> <version> -g` for every requested runtime, which downloads them into `$PNPM_HOME/bin` and makes them available to later workflow steps. It then disables context-aware shims for every installed runtime; see [Context-aware global shims](#context-aware-global-shims).
 4. If a `package.json` exists in the workspace, the action runs `pnpm install` (unless `install: false` is set). When runtimes were installed, `--no-runtime` is appended because the action has already processed `devEngines.runtime`.
 
