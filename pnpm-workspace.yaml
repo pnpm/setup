@@ -6,4 +6,4 @@ allowBuilds:
   # dependency that ships it is missing.
   unrs-resolver: false
 minimumReleaseAgeExclude:
-  - get-pnpm@0.0.1 || 0.0.6
+  - get-pnpm@0.0.1 || 0.0.6 || 0.0.8

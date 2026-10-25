@@ -16,7 +16,7 @@
     "@types/node": "^26.6.5",
     "@types/semver": "^7.8.0",
     "expand-tilde": "^2.0.2",
-    "get-pnpm": "^0.0.6",
+    "get-pnpm": "^0.0.8",
     "semver": "^7.8.5",
     "yaml": "^2.9.1"
   },
