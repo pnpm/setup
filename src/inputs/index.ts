@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 import { getBooleanInput, getInput, InputOptions } from '@actions/core'
-import expandTilde from 'expand-tilde'
 
 import { resolveRegistry } from '../install-pnpm/registry.js'
 
@@ -60,6 +60,26 @@ function parseRuntime (): RuntimeInput | undefined {
 }
 
 const MANIFEST_NAMES = ['package.json', 'package.yaml'] as const
+
+/**
+ * Expands a leading tilde in a file path.
+ *
+ * @param inputPath The file path to expand.
+ * @returns The expanded path.
+ */
+function expandTilde (inputPath: string): string {
+  const home = os.homedir()
+
+  if (inputPath.startsWith('~+')) {
+    return path.join(process.cwd(), inputPath.slice(2))
+  }
+
+  if (inputPath.startsWith('~')) {
+    return home ? path.join(home, inputPath.slice(1)) : inputPath
+  }
+
+  return inputPath
+}
 
 /**
  * `working-directory` says where the project is; `package-json-file` said
