@@ -23,9 +23,10 @@ export interface RestoredCache {
 
 export async function runRestoreCache (
   inputs: Inputs,
+  pnpmBin: string,
   runtimes: readonly RuntimeRequest[]
 ): Promise<RestoredCache | undefined> {
-  const fileHash = await hashFiles(resolveCacheDependencyPath(inputs))
+  const fileHash = await hashFiles(resolveCacheDependencyPath(inputs, pnpmBin))
   if (!fileHash) {
     // Both caches are keyed on the lockfile, so neither can be restored
     // without one. Only the store cache was asked for by name.
@@ -50,11 +51,10 @@ export async function runRestoreCache (
  * Ask the installed pnpm which lockfile it uses, including workspace membership
  * and per-project configuration. Explicit paths retain checkout-relative semantics.
  */
-export function resolveCacheDependencyPath (inputs: Inputs): string {
+export function resolveCacheDependencyPath (inputs: Inputs, pnpmBin: string): string {
   if (inputs.cacheDependencyPath) return inputs.cacheDependencyPath
   const checkout = process.env.GITHUB_WORKSPACE ?? process.cwd()
   const project = path.resolve(checkout, inputs.workingDirectory)
-  const pnpmBin = path.join(inputs.dest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
   return path.relative(checkout, path.join(lockfileDir(project, pnpmBin), 'pnpm-lock.yaml'))
 }
 
