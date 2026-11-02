@@ -7,6 +7,7 @@ import { finalizeCache, fingerprintRestoredStore, RestoredCache, runRestoreCache
 
 export async function restoreCache (
   inputs: Inputs,
+  pnpmBin: string,
   runtimes: readonly RuntimeRequest[]
 ): Promise<RestoredCache | undefined> {
   if (!isFeatureAvailable()) {
@@ -20,7 +21,7 @@ export async function restoreCache (
   }
 
   startGroup('Restoring cache...')
-  const restoredCache = await runRestoreCache(inputs, runtimes)
+  const restoredCache = await runRestoreCache(inputs, pnpmBin, runtimes)
   endGroup()
   return restoredCache
 }

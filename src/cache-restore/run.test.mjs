@@ -70,6 +70,8 @@ const { runRestoreCache, finalizeCache, fingerprintRestoredStore, runSaveCache, 
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
 )
 
+// cacheDependencyPath is set, so pnpm is never asked where the lockfile is.
+const pnpmBin = '/no/pnpm'
 const inputs = { cache: true, saveCache: true, cacheDependencyPath: 'pnpm-lock.yaml' }
 const runtimes = [{ name: 'node', version: '24.19.0' }]
 const keyPrefix = getCacheKeyPrefix(process.env.RUNNER_OS, os.arch(), runtimes)
@@ -93,14 +95,14 @@ beforeEach(() => {
 })
 
 test('verification caching remains enabled when store caching and installation are disabled', async () => {
-  await runRestoreCache({ ...inputs, cache: false, install: false }, runtimes)
+  await runRestoreCache({ ...inputs, cache: false, install: false }, pnpmBin, runtimes)
   assert.deepEqual(glob.hashFiles.mock.calls[0].arguments, ['pnpm-lock.yaml'])
   assert.deepEqual(verification.restoreVerificationCache.mock.calls[0].arguments, ['lockfile-hash'])
   assert.equal(cache.restoreCache.mock.callCount(), 0)
 })
 
 test('restore asks for the current lockfile before the broader runtime fallback', async () => {
-  await runRestoreCache(inputs, runtimes)
+  await runRestoreCache(inputs, pnpmBin, runtimes)
   assert.deepEqual(cache.restoreCache.mock.calls[0].arguments, [
     ['/pnpm-store'], lockfileKeyPrefix, [lockfileKeyPrefix, keyPrefix],
   ])
@@ -113,7 +115,7 @@ for (const [label, restoredKey, expectedHit] of [
 ]) {
   test(`${label}: reports cache-hit and publishes a fresh store`, async () => {
     cache.restoreCache.mock.mockImplementation(async () => restoredKey)
-    const restored = await runRestoreCache(inputs, runtimes)
+    const restored = await runRestoreCache(inputs, pnpmBin, runtimes)
     finalizeCache(restored, runtimes)
     assert.equal(core.outputs.get('cache-hit'), expectedHit)
 
@@ -126,7 +128,7 @@ for (const [label, restoredKey, expectedHit] of [
 }
 
 test('a failure before finalization does not save the restored store', async () => {
-  await runRestoreCache(inputs, runtimes)
+  await runRestoreCache(inputs, pnpmBin, runtimes)
   await runSaveCache(inputs)
   assert.equal(cache.saveCache.mock.callCount(), 0)
 })
@@ -134,7 +136,7 @@ test('a failure before finalization does not save the restored store', async () 
 const sameRuntimeKey = getSaveCacheKey(lockfileKeyPrefix, runtimes, 'previous-invocation')
 
 async function restoreBeforeInstall (installedRuntimes = runtimes) {
-  const restored = await runRestoreCache(inputs, runtimes)
+  const restored = await runRestoreCache(inputs, pnpmBin, runtimes)
   finalizeCache(restored, installedRuntimes)
   await fingerprintRestoredStore(restored, installedRuntimes)
 }
@@ -207,7 +209,7 @@ test('an unchanged store is saved when the installed runtime version differs', a
 test('save-cache false restores the store without saving it', async () => {
   const restoreOnly = { ...inputs, saveCache: false }
   cache.restoreCache.mock.mockImplementation(async () => sameRuntimeKey)
-  finalizeCache(await runRestoreCache(restoreOnly, runtimes), runtimes)
+  finalizeCache(await runRestoreCache(restoreOnly, pnpmBin, runtimes), runtimes)
   await saveCache(restoreOnly)
 
   assert.equal(cache.restoreCache.mock.callCount(), 1)
@@ -228,7 +230,7 @@ test('equivalent invocations in one workflow attempt publish distinct save keys'
 
   for (let invocation = 0; invocation < 2; invocation++) {
     /* eslint-disable no-await-in-loop -- each invocation restores what the previous one saved */
-    const restored = await runRestoreCache(inputs, runtimes)
+    const restored = await runRestoreCache(inputs, pnpmBin, runtimes)
     finalizeCache(restored, runtimes)
     await runSaveCache(inputs)
     /* eslint-enable no-await-in-loop */

@@ -34,7 +34,7 @@ async function runMain () {
   console.log('Installation Completed!')
 
   const requests = resolveRuntimeRequests(inputs)
-  const restoredCache = await restoreCache(inputs, requests)
+  const restoredCache = await restoreCache(inputs, result.pnpmBin, requests)
 
   const runtimes: InstalledRuntime[] = []
   for (const request of requests) {
@@ -74,7 +74,7 @@ async function runMain () {
   snapshotVerificationLog()
 
   if (inputs.install) {
-    pnpmInstall(inputs, runtimes.length > 0)
+    pnpmInstall(inputs, result.pnpmBin, runtimes.length > 0)
     // Uploaded here rather than in the post step so that whatever the job runs
     // next cannot alter what later jobs restore. When `install` is false the
     // log is not complete yet — the job installs in a step of its own, and the

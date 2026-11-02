@@ -20,6 +20,9 @@ importers:
       '@actions/glob':
         specifier: ^0.7.0
         version: 0.7.0
+      '@actions/tool-cache':
+        specifier: ^4.0.0
+        version: 4.0.0
       '@types/expand-tilde':
         specifier: ^2.0.2
         version: 2.0.2
@@ -86,6 +89,9 @@ packages:
 
   '@actions/io@3.0.2':
     resolution: {integrity: sha512-nRBchcMM+QK1pdjO7/idu86rbJI5YHUKCvKs0KxnSYbVe3F51UfGxuZX4Qy/fWlp6l7gWFwIkrOzN+oUK03kfw==}
+
+  '@actions/tool-cache@4.0.0':
+    resolution: {integrity: sha512-L8P9HbXvpvqjZDveb/fdsa55IVC0trfPgQ4ZwGo6r5af6YDVdM9vMGPZ7rgY2fAT9gGj4PSYd6bYlg3p3jD78A==}
 
   '@azure/abort-controller@2.2.0':
     resolution: {integrity: sha512-fNAjWnA/nZ2jz31kxR/AqRaUT8ewHBw/WuBIosK0moMy1C9e5ValbDfFdIxJzVOOYaYkV/b2F1S4H/aHiqfVQg==}
@@ -1287,6 +1293,14 @@ snapshots:
       undici: 6.29.0
 
   '@actions/io@3.0.2': {}
+
+  '@actions/tool-cache@4.0.0':
+    dependencies:
+      '@actions/core': 3.0.1
+      '@actions/exec': 3.0.0
+      '@actions/http-client': 4.0.1
+      '@actions/io': 3.0.2
+      semver: 7.8.5
 
   '@azure/abort-controller@2.2.0':
     dependencies:
