@@ -12,6 +12,8 @@ import { Inputs } from '../inputs/index.js'
 import { installPnpm } from './download.js'
 
 export interface SelfInstallerResult {
+  /** The pnpm executable. It is in the tool cache when the runner has one, not in `dest`. */
+  pnpmBin: string
   binDest: string
   pnpmHome: string
 }
@@ -46,7 +48,7 @@ export async function runSelfInstaller (inputs: Inputs): Promise<SelfInstallerRe
   addPath(path.join(dest, 'bin'))
   exportVariable('PNPM_HOME', dest)
 
-  return { binDest, pnpmHome: dest }
+  return { pnpmBin, binDest, pnpmHome: dest }
 }
 
 /**
