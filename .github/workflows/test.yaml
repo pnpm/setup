@@ -164,6 +164,25 @@ jobs:
       - name: 'Test: moving selector cache keys'
         run: pnpm test
 
+  pnpm-executable-cache-hit:
+    name: 'Restore the pnpm executable from the cache'
+    # Prime saved the executable for the same exact version.
+    needs: runtime-cache-prime
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Nothing listens on this registry, so a download would fail the step:
+      # passing proves the executable came from the cache.
+      - uses: ./
+        with:
+          version: '11.22.0'
+          registry: 'http://127.0.0.1:9/'
+          install: false
+
+      - name: 'Test: the cached executable runs'
+        run: test "$(pnpm --version)" = 11.22.0
+
   runtime-cache-hit:
     name: 'Restore runtime cache'
     needs: runtime-cache-prime
