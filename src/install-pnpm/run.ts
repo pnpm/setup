@@ -4,11 +4,13 @@ import { mkdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 import util from 'node:util'
 
-import { addPath, exportVariable, info } from '@actions/core'
+import { addPath, exportVariable, info, warning } from '@actions/core'
 import { readProjectPin } from 'get-pnpm'
+import semver from 'semver'
 import { parse as parseYaml } from 'yaml'
 
 import { Inputs } from '../inputs/index.js'
+import { binaryCacheKey, restoreBinary, saveBinary } from './binary-cache.js'
 import { downloadPnpm } from './download.js'
 
 export interface SelfInstallerResult {
@@ -19,8 +21,27 @@ export interface SelfInstallerResult {
 export async function runSelfInstaller (inputs: Inputs): Promise<SelfInstallerResult> {
   const { dest, registry } = inputs
   const versionSpec = selectVersionSpec(inputs)
-  info(`Downloading pnpm ${versionSpec} from ${registry}`)
+  const cacheKey = binaryCacheKey(versionSpec)
 
+  await rm(dest, { recursive: true, force: true })
+  if (!(cacheKey && await restoreBinary(dest, cacheKey) && await isRestoredVersion(dest, versionSpec))) {
+    await downloadAndCheck(versionSpec, registry, dest)
+    if (cacheKey) await saveBinary(dest, cacheKey)
+  }
+
+  // dest doubles as PNPM_HOME: `pnpm runtime set -g` installs runtime
+  // binaries into $PNPM_HOME/bin and `pnpm self-update` places its shims
+  // there. dest/bin is added after dest so it gets higher PATH precedence —
+  // a self-updated pnpm must win over the executable this action installed.
+  addPath(dest)
+  addPath(path.join(dest, 'bin'))
+  exportVariable('PNPM_HOME', dest)
+
+  return { binDest: dest, pnpmHome: dest }
+}
+
+async function downloadAndCheck (versionSpec: string, registry: string, dest: string): Promise<void> {
+  info(`Downloading pnpm ${versionSpec} from ${registry}`)
   await rm(dest, { recursive: true, force: true })
   // Create dest/bin upfront: pnpm ≤ 12.0.0-alpha.17 refuses to run
   // `pnpm runtime set -g` when the global bin directory is missing
@@ -34,16 +55,19 @@ export async function runSelfInstaller (inputs: Inputs): Promise<SelfInstallerRe
   if (actualVersion !== installedVersion) {
     throw new Error(`The installed pnpm reports version ${actualVersion}, expected ${installedVersion}`)
   }
+}
 
-  // dest doubles as PNPM_HOME: `pnpm runtime set -g` installs runtime
-  // binaries into $PNPM_HOME/bin and `pnpm self-update` places its shims
-  // there. dest/bin is added after dest so it gets higher PATH precedence —
-  // a self-updated pnpm must win over the executable this action installed.
-  addPath(dest)
-  addPath(path.join(dest, 'bin'))
-  exportVariable('PNPM_HOME', dest)
-
-  return { binDest: dest, pnpmHome: dest }
+/**
+ * A restore that was cut short, or an entry that no longer runs on this
+ * runner, falls back to a fresh download instead of failing the job.
+ */
+async function isRestoredVersion (dest: string, versionSpec: string): Promise<boolean> {
+  const pnpmBin = path.join(dest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
+  try {
+    if (await readVersion(pnpmBin) === semver.valid(versionSpec)) return true
+  } catch {}
+  warning('The cached pnpm executable did not report the expected version; downloading it again')
+  return false
 }
 
 /**
