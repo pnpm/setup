@@ -15,11 +15,19 @@ const { outputFiles } = await build({
     name: 'installer-fixtures',
     setup (build) {
       // Only run.ts's own child_process: get-pnpm, bundled in, imports it too.
-      build.onResolve({ filter: /^(@actions\/core|\.\/download\.js|node:child_process)$/ }, args =>
+      build.onResolve({ filter: /^(@actions\/core|\.\/download\.js|\.\/binary-cache\.js|node:child_process)$/ }, args =>
         args.path === 'node:child_process' && !args.importer.endsWith('run.ts') ? undefined : { path: args.path, namespace: 'fixture' })
       build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents:
-        args.path === '@actions/core' ? 'export const info = () => {}; export const addPath = () => {}; export const exportVariable = () => {}' :
-          args.path === './download.js' ? `
+        args.path === '@actions/core' ? 'export const info = () => {}; export const warning = () => {}; export const addPath = () => {}; export const exportVariable = () => {}' :
+          args.path === './binary-cache.js' ? `
+          export const binaryCacheKey = spec => /^\\d+\\.\\d+\\.\\d+$/.test(spec) ? 'pnpm-binary-' + spec : undefined
+          export async function restoreBinary(dest, key) {
+            globalThis.restoredKeys?.push(key)
+            return globalThis.cachedKey === key
+          }
+          export async function saveBinary(dest, key) { globalThis.savedKeys?.push(key) }
+        ` :
+            args.path === './download.js' ? `
           export async function downloadPnpm(spec) {
             globalThis.selectedSpec = spec
             const version = /^\\d+\\.\\d+\\.\\d+$/.test(spec) ? spec : '12.8.2'
@@ -30,7 +38,9 @@ const { outputFiles } = await build({
           export function spawn(version, args) {
             globalThis.versionArgs = args
             const cp = new EventEmitter(); cp.stdout = new EventEmitter()
-            process.nextTick(() => { cp.stdout.emit('data', version); cp.emit('close', 0) })
+            // A restored executable is run from dest; a downloaded one, by this fixture, by its version.
+            const output = /[\\/]pnpm(\\.exe)?$/.test(version) ? String(globalThis.cachedVersion) : version
+            process.nextTick(() => { cp.stdout.emit('data', output); cp.emit('close', 0) })
             return cp
           }
         `,
@@ -139,4 +149,38 @@ test('a member keeps its own pnpm declaration when the workspace root has none',
   writeFileSync(path.join(root, 'package.json'), JSON.stringify({ packageManager: 'pnpm@12.8.1' }))
   await bundled.exports.runSelfInstaller(inputs)
   assert.equal(globalThis.selectedSpec, '12.8.1')
+})
+
+test('an exact version is restored from the cache, and downloaded and cached when it is not there', async testContext => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'setup-installer-'))
+  const previous = process.env.GITHUB_WORKSPACE
+  testContext.after(() => {
+    rmSync(root, { recursive: true, force: true })
+    if (previous === undefined) delete process.env.GITHUB_WORKSPACE
+    else process.env.GITHUB_WORKSPACE = previous
+    for (const name of ['selectedSpec', 'versionArgs', 'restoredKeys', 'savedKeys', 'cachedKey', 'cachedVersion']) delete globalThis[name]
+  })
+  process.env.GITHUB_WORKSPACE = root
+  writeFileSync(path.join(root, 'package.json'), JSON.stringify({ packageManager: 'pnpm@12.8.1' }))
+  const inputs = { dest: path.join(root, 'tools'), packageJsonFile: 'package.json' }
+  const run = async () => {
+    globalThis.restoredKeys = []
+    globalThis.savedKeys = []
+    delete globalThis.selectedSpec
+    await bundled.exports.runSelfInstaller(inputs)
+    return { downloaded: globalThis.selectedSpec, restored: globalThis.restoredKeys, saved: globalThis.savedKeys }
+  }
+
+  assert.deepEqual(await run(), { downloaded: '12.8.1', restored: ['pnpm-binary-12.8.1'], saved: ['pnpm-binary-12.8.1'] })
+
+  globalThis.cachedKey = 'pnpm-binary-12.8.1'
+  globalThis.cachedVersion = '12.8.1'
+  assert.deepEqual(await run(), { downloaded: undefined, restored: ['pnpm-binary-12.8.1'], saved: [] })
+
+  // An entry that does not run as the expected version is replaced, not trusted.
+  globalThis.cachedVersion = '12.8.0'
+  assert.deepEqual(await run(), { downloaded: '12.8.1', restored: ['pnpm-binary-12.8.1'], saved: ['pnpm-binary-12.8.1'] })
+
+  writeFileSync(path.join(root, 'package.json'), JSON.stringify({ devEngines: { packageManager: { name: 'pnpm', version: '^12.0.0' } } }))
+  assert.deepEqual(await run(), { downloaded: '^12.0.0', restored: [], saved: [] })
 })

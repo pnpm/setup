@@ -229,6 +229,22 @@ all but one job in a matrix. The lockfile verification cache is still saved.
     save-cache: ${{ github.ref == 'refs/heads/main' }}
 ```
 
+### pnpm executable cache
+
+When the pnpm version is exact — an exact `version` input, `packageManager`,
+or a version locked in `pnpm-lock.yaml` — the action caches the executable it
+downloaded, keyed on that version, the platform, the architecture and the libc,
+and restores it on later runs instead of downloading it again. This happens
+independently of the `cache` input: the executable is the same for every job
+that pins the version, and downloading it can take tens of seconds when the
+registry is slow. A range or dist-tag is resolved against the registry on every
+run and is not cached.
+
+The executable is saved right after its npm signature and checksum are
+verified, before anything else in the job runs from `dest`. A restored
+executable that does not report the expected version is discarded and
+downloaded again.
+
 ### Lockfile verification cache
 
 pnpm v11 and newer check every lockfile entry before installing it — that each
