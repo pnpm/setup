@@ -137,10 +137,14 @@ async function linkAliases (pnpmBin: string): Promise<void> {
     if (existsSync(aliasPath)) continue
     try {
       await link(pnpmBin, aliasPath)
-    } catch {
+    } catch (err) {
+      // Another job sharing this tool cache created the alias in the meantime.
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue
       // Copy under a temporary name and rename it afterwards. If the copy is
       // interrupted, the alias does not exist, and the next run retries it.
-      const partial = `${aliasPath}.partial`
+      // The name is unique per process so that concurrent jobs do not write
+      // to the same file.
+      const partial = `${aliasPath}.${process.pid}.partial`
       await copyFile(pnpmBin, partial)
       await rename(partial, aliasPath)
     }
