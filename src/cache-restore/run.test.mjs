@@ -26,6 +26,7 @@ const mocks = {
   '@actions/exec': String.raw`export const getExecOutput = async () => ({ stdout: '/pnpm-store\n' })`,
   '@actions/glob': 'import { mock } from \'node:test\'; export const hashFiles = mock.fn(async () => \'lockfile-hash\')',
   '../lockfile-verification-cache/index.js': 'import { mock } from \'node:test\'; export const restoreVerificationCache = mock.fn(async () => {})',
+  '../pnpm-install/lockfile.js': 'import { mock } from \'node:test\'; export const lockfileDir = mock.fn(project => project)',
   '../pnpm-store-prune/index.js': `
     import { mock } from 'node:test'
     export const pruneStore = mock.fn(async () => {})
@@ -49,6 +50,7 @@ const bundle = await build({
       export * as fingerprint from '../store-fingerprint/index.js'
       export * as glob from '@actions/glob'
       export * as verification from '../lockfile-verification-cache/index.js'
+      export * as lockfile from '../pnpm-install/lockfile.js'
     `,
     resolveDir: fileURLToPath(new URL('.', import.meta.url)),
   },
@@ -66,11 +68,11 @@ const bundle = await build({
     },
   }],
 })
-const { runRestoreCache, finalizeCache, fingerprintRestoredStore, runSaveCache, saveCache, cache, core, glob, verification, prune, fingerprint } = await import(
+const { runRestoreCache, finalizeCache, fingerprintRestoredStore, runSaveCache, saveCache, cache, core, glob, verification, lockfile, prune, fingerprint } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
 )
 
-// cacheDependencyPath is set, so pnpm is never asked where the lockfile is.
+// cacheDependencyPath is set, so pnpm is not asked where the lockfile is.
 const pnpmBin = '/no/pnpm'
 const inputs = { cache: true, saveCache: true, cacheDependencyPath: 'pnpm-lock.yaml' }
 const runtimes = [{ name: 'node', version: '24.19.0' }]
@@ -92,6 +94,7 @@ beforeEach(() => {
   fingerprint.statStore.mock.mockImplementation(async () => `stat-${stats++}`)
   glob.hashFiles.mock.resetCalls()
   verification.restoreVerificationCache.mock.resetCalls()
+  lockfile.lockfileDir.mock.resetCalls()
 })
 
 test('verification caching remains enabled when store caching and installation are disabled', async () => {
@@ -99,6 +102,12 @@ test('verification caching remains enabled when store caching and installation a
   assert.deepEqual(glob.hashFiles.mock.calls[0].arguments, ['pnpm-lock.yaml'])
   assert.deepEqual(verification.restoreVerificationCache.mock.calls[0].arguments, ['lockfile-hash'])
   assert.equal(cache.restoreCache.mock.callCount(), 0)
+})
+
+test('without cache-dependency-path, the installed pnpm is asked where the lockfile is', async () => {
+  await runRestoreCache({ cache: false, workingDirectory: '.' }, pnpmBin, runtimes)
+  assert.equal(lockfile.lockfileDir.mock.calls[0].arguments[1], pnpmBin)
+  assert.deepEqual(glob.hashFiles.mock.calls[0].arguments, ['pnpm-lock.yaml'])
 })
 
 test('restore asks for the current lockfile before the broader runtime fallback', async () => {
