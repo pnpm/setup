@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import path from 'node:path'
@@ -10,6 +9,7 @@ import { parse as parseYaml } from 'yaml'
 
 import { Inputs } from '../inputs/index.js'
 import { installPnpm } from './download.js'
+import { readVersion } from './version.js'
 
 export interface SelfInstallerResult {
   /** The pnpm executable in `dest`. */
@@ -27,7 +27,7 @@ export async function runSelfInstaller (inputs: Inputs): Promise<SelfInstallerRe
   // `pnpm runtime set -g` when the global bin directory is missing
   // (fixed in alpha.18, but users may pin older versions).
   await mkdir(path.join(dest, 'bin'), { recursive: true })
-  const { version: installedVersion, binPath: pnpmBin } = await installPnpm(versionSpec, registry, dest)
+  const { version: installedVersion, binPath: pnpmBin } = await installPnpm(versionSpec, registry, dest, { cacheExecutable: inputs.cache })
 
   // Sanity check — catches a binary that can't run on this system (e.g. a
   // glibc build on a musl-only distro) with a clear error.
@@ -98,25 +98,4 @@ function readPackageManager (packageJsonFile: string): string | undefined {
     if (!util.types.isNativeError(error) || !('code' in error) || error.code !== 'ENOENT') throw error
     return undefined
   }
-}
-
-function readVersion (pnpmBin: string): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    // Check the downloaded binary itself, not a version selected by the project.
-    const cp = spawn(pnpmBin, ['--config.pm-on-fail=ignore', '--version'], {
-      stdio: ['ignore', 'pipe', 'inherit'],
-    })
-    let output = ''
-    cp.stdout.on('data', (chunk) => {
-      output += chunk
-    })
-    cp.on('error', reject)
-    cp.on('close', (code) => {
-      if (code === 0) {
-        resolve(output.trim())
-      } else {
-        reject(new Error(`"${pnpmBin} --version" exited with code ${code}`))
-      }
-    })
-  })
 }

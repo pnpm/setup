@@ -10,17 +10,43 @@ import { build } from 'esbuild'
 
 // The real tool cache runs against a temporary RUNNER_TOOL_CACHE. get-pnpm is
 // stubbed with one that writes a fake executable and records each download.
+// The GitHub Actions cache is stubbed with a directory per key, and the
+// version an executable reports is read from the fake executable's contents.
 const { outputFiles } = await build({
   entryPoints: [fileURLToPath(new URL('./download.ts', import.meta.url))],
   bundle: true, platform: 'node', format: 'cjs', write: false,
   plugins: [{
     name: 'download-fixtures',
     setup (build) {
-      build.onResolve({ filter: /^(get-pnpm|\.\/musl\.js|@actions\/core)$/ }, args =>
+      build.onResolve({ filter: /^(get-pnpm|\.\/musl\.js|\.\/version\.js|\.\/binary-cache\.js|@actions\/core)$/ }, args =>
         args.path === '@actions/core' && !args.importer.endsWith('download.ts') ? undefined : { path: args.path, namespace: 'fixture' })
       build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents:
         args.path === '@actions/core' ? 'export const info = () => {}; export const warning = message => globalThis.warnings.push(message)' :
-          args.path === './musl.js' ? 'export const isMusl = () => globalThis.musl === true' : `
+          args.path === './musl.js' ? 'export const isMusl = () => globalThis.musl === true' :
+            args.path === './version.js' ? `
+          import { readFileSync } from 'node:fs'
+          export async function readVersion (pnpmBin) {
+            const match = /^pnpm (\\S+)$/.exec(readFileSync(pnpmBin, 'utf8'))
+            if (!match) throw new Error('does not run')
+            return match[1]
+          }
+        ` : args.path === './binary-cache.js' ? `
+          import { cpSync, existsSync } from 'node:fs'
+          import path from 'node:path'
+          export const binaryCacheKey = (spec, arch) => /^\\d+\\.\\d+\\.\\d+$/.test(spec) ? 'pnpm-binary-' + arch + '-' + spec : undefined
+          export const binaryCacheDir = () => path.join(process.env.RUNNER_TEMP, 'setup-pnpm-executable')
+          export async function restoreBinary (dir, key) {
+            globalThis.restores.push(key)
+            const entry = path.join(globalThis.actionsCache, key)
+            if (!existsSync(entry)) return false
+            cpSync(entry, dir, { recursive: true })
+            return true
+          }
+          export async function saveBinary (dir, key) {
+            globalThis.saves.push(key)
+            cpSync(dir, path.join(globalThis.actionsCache, key), { recursive: true })
+          }
+        ` : `
           import { mkdirSync, writeFileSync } from 'node:fs'
           import path from 'node:path'
           export async function downloadPnpm ({ versionSpec, dest }) {
@@ -60,6 +86,9 @@ beforeEach(() => {
   process.env.RUNNER_TEMP = path.join(root, 'temp')
   globalThis.downloads = []
   globalThis.warnings = []
+  globalThis.restores = []
+  globalThis.saves = []
+  globalThis.actionsCache = path.join(root, 'actions-cache')
   globalThis.musl = false
   globalThis.resolvesTo = undefined
 })
@@ -72,6 +101,9 @@ afterEach(() => {
   }
   delete globalThis.downloads
   delete globalThis.warnings
+  delete globalThis.restores
+  delete globalThis.saves
+  delete globalThis.actionsCache
   delete globalThis.musl
   delete globalThis.resolvesTo
 })
@@ -241,6 +273,82 @@ test('an incomplete entry left by something else is not marked complete or repla
   assert.equal(readFileSync(path.join(entry, exe('pnpm')), 'utf8'), 'partial')
   assert.ok(!existsSync(`${entry}.complete`))
   assert.equal(globalThis.warnings.length, 1)
+})
+
+const cacheExecutable = { cacheExecutable: true }
+const actionsCacheKey = version => `pnpm-binary-${os.arch()}-${version}`
+
+test('without cacheExecutable, the GitHub Actions cache is not used', async () => {
+  await installPnpm('12.8.1', registry, dest)
+
+  assert.deepEqual(globalThis.restores, [])
+  assert.deepEqual(globalThis.saves, [])
+})
+
+test('an exact version missing from both caches is downloaded and saved to the Actions cache', async () => {
+  const installed = await installPnpm('12.8.1', registry, dest, cacheExecutable)
+
+  assert.deepEqual(globalThis.restores, [actionsCacheKey('12.8.1')])
+  assert.deepEqual(globalThis.downloads, ['12.8.1'])
+  assert.deepEqual(globalThis.saves, [actionsCacheKey('12.8.1')])
+  // What was saved is the download as get-pnpm left it, before any alias.
+  const saved = path.join(globalThis.actionsCache, actionsCacheKey('12.8.1'))
+  assert.deepEqual(readdirSync(saved).sort(), ['dist', exe('pnpm')].sort())
+  assert.equal(readFileSync(installed.binPath, 'utf8'), 'pnpm 12.8.1')
+  assert.ok(existsSync(`${path.join(toolCache, 'pnpm', '12.8.1', os.arch())}.complete`))
+  assert.deepEqual(readdirSync(process.env.RUNNER_TEMP), [])
+})
+
+test('an exact version in the Actions cache is restored into the tool cache without downloading', async () => {
+  await installPnpm('12.8.1', registry, dest, cacheExecutable)
+  // A fresh runner: an empty tool cache and dest.
+  rmSync(toolCache, { recursive: true })
+  rmSync(dest, { recursive: true })
+  globalThis.downloads = []
+  globalThis.saves = []
+
+  const installed = await installPnpm('12.8.1', registry, dest, cacheExecutable)
+
+  assert.deepEqual(globalThis.downloads, [])
+  assert.deepEqual(globalThis.saves, [])
+  assert.deepEqual(installed, { version: '12.8.1', binPath: path.join(dest, exe('pnpm')) })
+  assert.ok(existsSync(path.join(dest, 'dist', 'pnpm.cjs')))
+  for (const alias of aliases) {
+    assert.equal(readFileSync(path.join(dest, exe(alias)), 'utf8'), 'pnpm 12.8.1')
+  }
+  assert.ok(existsSync(`${path.join(toolCache, 'pnpm', '12.8.1', os.arch())}.complete`))
+})
+
+test('a restored executable that does not report the version is downloaded again and kept out of the tool cache', async () => {
+  const saved = path.join(globalThis.actionsCache, actionsCacheKey('12.8.1'))
+  mkdirSync(saved, { recursive: true })
+  writeFileSync(path.join(saved, exe('pnpm')), 'truncated')
+
+  const installed = await installPnpm('12.8.1', registry, dest, cacheExecutable)
+
+  assert.deepEqual(globalThis.downloads, ['12.8.1'])
+  assert.equal(globalThis.warnings.length, 1)
+  assert.equal(readFileSync(installed.binPath, 'utf8'), 'pnpm 12.8.1')
+  assert.equal(readFileSync(path.join(toolCache, 'pnpm', '12.8.1', os.arch(), exe('pnpm')), 'utf8'), 'pnpm 12.8.1')
+})
+
+test('a version in the tool cache is not restored from the Actions cache', async () => {
+  seedCacheEntry('12.8.1')
+
+  await installPnpm('12.8.1', registry, dest, cacheExecutable)
+
+  assert.deepEqual(globalThis.restores, [])
+  assert.deepEqual(globalThis.downloads, [])
+})
+
+test('a range is not looked up in or saved to the Actions cache', async () => {
+  globalThis.resolvesTo = '12.8.2'
+
+  await installPnpm('^12.0.0', registry, dest, cacheExecutable)
+
+  assert.deepEqual(globalThis.restores, [])
+  assert.deepEqual(globalThis.saves, [])
+  assert.deepEqual(globalThis.downloads, ['^12.0.0'])
 })
 
 test('without RUNNER_TOOL_CACHE, pnpm is downloaded into dest', async () => {

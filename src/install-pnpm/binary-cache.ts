@@ -1,4 +1,6 @@
-import { restoreCache, saveCache } from '@actions/cache'
+import path from 'node:path'
+
+import { isFeatureAvailable, restoreCache, saveCache } from '@actions/cache'
 import { info, warning } from '@actions/core'
 import semver from 'semver'
 
@@ -8,26 +10,36 @@ import semver from 'semver'
  * before the registry has been asked, and a cache that had to ask first would
  * save little.
  *
- * glibc and musl hosts get different executables from the same version, so
- * the libc is part of the key. The restore path is part of the cache version
- * that `@actions/cache` matches on, so a different `dest` never restores
- * another job's directory.
+ * `arch` is the tool cache architecture, which has a `-musl` suffix on musl
+ * hosts: glibc and musl hosts get different executables from the same
+ * version.
  */
 export function binaryCacheKey (
   versionSpec: string,
-  platform: string = process.platform,
-  arch: string = process.arch,
-  musl: boolean = isMusl()
+  arch: string,
+  platform: string = process.platform
 ): string | undefined {
   const version = semver.valid(versionSpec)
   if (!version) return undefined
-  return `pnpm-binary-${platform}-${arch}${musl ? '-musl' : ''}-${version}`
+  return `pnpm-binary-${platform}-${arch}-${version}`
 }
 
-/** Whether `dest` was restored from the cache. */
-export async function restoreBinary (dest: string, key: string): Promise<boolean> {
+/**
+ * The directory the executable is downloaded into and restored into when it
+ * is cached, or `undefined` when the GitHub Actions cache is not available.
+ *
+ * `@actions/cache` matches entries on the paths they were saved from, so this
+ * directory has to be the same in every job.
+ */
+export function binaryCacheDir (): string | undefined {
+  if (!process.env.RUNNER_TEMP || !isFeatureAvailable()) return undefined
+  return path.join(process.env.RUNNER_TEMP, 'setup-pnpm-executable')
+}
+
+/** Whether `dir` was restored from the cache. */
+export async function restoreBinary (dir: string, key: string): Promise<boolean> {
   try {
-    const restoredKey = await restoreCache([dest], key)
+    const restoredKey = await restoreCache([dir], key)
     if (restoredKey) {
       info(`pnpm restored from cache key: ${restoredKey}`)
       return true
@@ -40,27 +52,16 @@ export async function restoreBinary (dest: string, key: string): Promise<boolean
 }
 
 /**
- * Called right after the download is verified and before anything else runs
- * from `dest`, so the cache holds exactly what get-pnpm checked against npm's
- * signature, and not runtimes or shims installed into it later.
+ * Called right after the download is verified and before anything runs from
+ * `dir`, so the cache holds exactly what get-pnpm checked against npm's
+ * signature.
  */
-export async function saveBinary (dest: string, key: string): Promise<void> {
+export async function saveBinary (dir: string, key: string): Promise<void> {
   try {
-    const cacheId = await saveCache([dest], key)
+    const cacheId = await saveCache([dir], key)
     if (cacheId === -1) return
     info(`pnpm executable cached with the key: ${key}`)
   } catch (error) {
     warning(`Failed to cache the pnpm executable: ${(error as Error).message}`)
-  }
-}
-
-/** Mirrors get-pnpm's own probe, which picks the musl executable on these hosts. */
-function isMusl (): boolean {
-  if (process.platform !== 'linux') return false
-  try {
-    const report = process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined
-    return report?.header != null && !report.header.glibcVersionRuntime
-  } catch {
-    return false
   }
 }

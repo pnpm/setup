@@ -26,7 +26,7 @@ Only one version of each runtime can be installed globally. If a runtime name is
 | `dest` | Where to store pnpm files. Also used as `PNPM_HOME`. Defaults to `~/setup-pnpm`. |
 | `runtime` | Runtime spec, in `<name>` or `<name>@<version>` form (e.g. `node@22`, `node@lts`, `bun@latest`, `deno@2`). Supported names: `node`, `bun`, `deno`. When the version is omitted, falls back to `devEngines.runtime`, then to `lts` (for `node`) / `latest`. Node.js also supports version files with the precedence described below. If the input itself is omitted, installs every entry in `devEngines.runtime` and adds Node.js when a version file supplies it. |
 | `node-version-file` | Optional Node.js version file path, relative to `working-directory`. By default, checks `.node-version`, `.nvmrc`, then `.tool-versions` when the manifest does not declare Node.js. Set to `false` to disable file detection. An explicit path overrides the manifest; an explicit version in `runtime` overrides both. |
-| `cache` | Cache the pnpm store directory and restore it before installing the runtimes. Default: `false`. |
+| `cache` | Cache the pnpm store directory and restore it before installing the runtimes. When the pnpm version is exact, also cache the pnpm executable (see [pnpm executable cache](#pnpm-executable-cache)). Default: `false`. |
 | `save-cache` | Save the pnpm store at the end of the job when `cache` is `true`. Set to `false` to only restore it. Default: `true`. |
 | `cache-dependency-path` | Path(s) to the pnpm lockfile, used to compute the cache key. Relative to `GITHUB_WORKSPACE`. Defaults to the shared workspace lockfile for members, or `pnpm-lock.yaml` inside `working-directory` otherwise. |
 | `working-directory` | Directory the project lives in, relative to `GITHUB_WORKSPACE`. `pnpm install` runs there and `node-version-file` resolves relative to it. Package-manager selection and shared-lockfile caching follow the workspace root for members. Default: `.`. |
@@ -231,19 +231,23 @@ all but one job in a matrix. The lockfile verification cache is still saved.
 
 ### pnpm executable cache
 
-When the pnpm version is exact — an exact `version` input, `packageManager`,
-or a version locked in `pnpm-lock.yaml` — the action caches the executable it
-downloaded, keyed on that version, the platform, the architecture and the libc,
-and restores it on later runs instead of downloading it again. This happens
-independently of the `cache` input: the executable is the same for every job
-that pins the version, and downloading it can take tens of seconds when the
+With `cache: true` and an exact pnpm version (an exact `version` input,
+`packageManager`, or a version locked in `pnpm-lock.yaml`), the action keeps
+the pnpm executable in the GitHub Actions cache, keyed on that version, the
+platform, the architecture and the libc. Later runs restore it instead of
+downloading it, which helps GitHub-hosted runners: they start every job with an
+empty tool cache, and downloading pnpm can take tens of seconds when the
 registry is slow. A range or dist-tag is resolved against the registry on every
 run and is not cached.
 
 The executable is saved right after its npm signature and checksum are
-verified, before anything else in the job runs from `dest`. A restored
+verified, before anything runs from it. A restored executable is not checked
+against npm's signature again, so the action trusts the cache the way it trusts
+a restored store. That trust is why this needs `cache: true`. A restored
 executable that does not report the expected version is discarded and
-downloaded again.
+downloaded again. On self-hosted runners, the [tool
+cache](#how-it-works) is checked first, so a runner that already has the
+version neither restores nor downloads it.
 
 ### Lockfile verification cache
 

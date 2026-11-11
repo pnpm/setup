@@ -178,6 +178,7 @@ jobs:
         with:
           version: '11.22.0'
           registry: 'http://127.0.0.1:9/'
+          cache: true
           install: false
 
       - name: 'Test: the cached executable runs'

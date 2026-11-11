@@ -14,14 +14,15 @@ const { outputFiles } = await build({
   plugins: [{
     name: 'installer-fixtures',
     setup (build) {
-      // Only run.ts's own child_process: get-pnpm, bundled in, imports it too.
+      // Only the sanity check's child_process: get-pnpm, bundled in, imports it too.
       build.onResolve({ filter: /^(@actions\/core|\.\/download\.js|node:child_process)$/ }, args =>
-        args.path === 'node:child_process' && !args.importer.endsWith('run.ts') ? undefined : { path: args.path, namespace: 'fixture' })
+        args.path === 'node:child_process' && !args.importer.endsWith('version.ts') ? undefined : { path: args.path, namespace: 'fixture' })
       build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents:
         args.path === '@actions/core' ? 'export const info = () => {}; export const addPath = () => {}; export const exportVariable = () => {}' :
           args.path === './download.js' ? `
-          export async function installPnpm(spec) {
+          export async function installPnpm(spec, registry, dest, options) {
             globalThis.selectedSpec = spec
+            globalThis.installOptions = options
             const version = /^\\d+\\.\\d+\\.\\d+$/.test(spec) ? spec : '12.8.2'
             return { version, binPath: version }
           }
@@ -50,6 +51,7 @@ test('installer selects the lock, preserves explicit input, and isolates its san
     else process.env.GITHUB_WORKSPACE = previous
     delete globalThis.selectedSpec
     delete globalThis.versionArgs
+    delete globalThis.installOptions
   })
   process.env.GITHUB_WORKSPACE = root
   writeFileSync(path.join(root, 'package.json'), JSON.stringify({ devEngines: { packageManager: { name: 'pnpm', version: '>=12.0.0 <13.0.0' } } }))
@@ -67,6 +69,10 @@ importers: {}
   await bundled.exports.runSelfInstaller(inputs)
   assert.equal(globalThis.selectedSpec, '12.8.1')
   assert.deepEqual(globalThis.versionArgs, ['--config.pm-on-fail=ignore', '--version'])
+  // The executable is kept in the GitHub Actions cache only with `cache: true`.
+  assert.deepEqual(globalThis.installOptions, { cacheExecutable: undefined })
+  await bundled.exports.runSelfInstaller({ ...inputs, cache: true })
+  assert.deepEqual(globalThis.installOptions, { cacheExecutable: true })
   writeFileSync(path.join(root, 'pnpm-workspace.yaml'), "packages: ['packages/*', '!packages/excluded']\n")
   for (const name of ['app', 'excluded']) {
     const directory = path.join(root, 'packages', name)

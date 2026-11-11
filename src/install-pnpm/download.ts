@@ -8,12 +8,22 @@ import { find } from '@actions/tool-cache'
 import { downloadPnpm as downloadVerifiedPnpm } from 'get-pnpm'
 import semver from 'semver'
 
+import { binaryCacheDir, binaryCacheKey, restoreBinary, saveBinary } from './binary-cache.js'
 import { isMusl } from './musl.js'
+import { readVersion } from './version.js'
 
 // The action installs pnpm's self-contained executable and uses `pnpm runtime`
 // to install a JavaScript runtime. Both are available from v11 onward, so that
 // is the oldest major this action can install.
 const MIN_SUPPORTED_MAJOR = 11
+
+export interface InstallOptions {
+  /**
+   * Whether an exact version that the tool cache does not have is also kept
+   * in the GitHub Actions cache, where jobs on other runners can restore it.
+   */
+  cacheExecutable?: boolean
+}
 
 export interface InstalledPnpm {
   version: string
@@ -31,13 +41,17 @@ export interface InstalledPnpm {
  * and the download is cached under the version it resolved to. The tool cache
  * entry is then linked into `dest`, so `dest` holds pnpm either way.
  *
+ * With `cacheExecutable`, an exact version that the tool cache does not have is
+ * restored from the GitHub Actions cache, or downloaded and saved there. This
+ * helps GitHub-hosted runners, which start every job with an empty tool cache.
+ *
  * When `RUNNER_TOOL_CACHE` is not set (it is outside the runner, e.g. in
  * `run.sh`), pnpm is downloaded into `dest` instead.
  *
  * `registry` must end in a slash (see `resolveRegistry`). A mirror has to pass
  * npm's metadata through unchanged: the signature check needs `dist.signatures`.
  */
-export async function installPnpm (spec: string, registry: string, dest: string): Promise<InstalledPnpm> {
+export async function installPnpm (spec: string, registry: string, dest: string, options: InstallOptions = {}): Promise<InstalledPnpm> {
   // An exact version can be rejected before anything is downloaded; anything
   // else is only known once get-pnpm has resolved it.
   const exact = semver.valid(spec)
@@ -60,22 +74,50 @@ export async function installPnpm (spec: string, registry: string, dest: string)
     await linkEntries(cached, dest)
     return { version: exact, binPath: path.join(dest, executableName('pnpm')) }
   }
-  info(`Downloading pnpm ${spec} from ${registry}`)
-  return downloadThroughToolCache(spec, registry, arch, dest)
+  const cacheKey = options.cacheExecutable ? binaryCacheKey(spec, arch) : undefined
+  const cacheDir = cacheKey ? binaryCacheDir() : undefined
+  return downloadThroughToolCache(spec, registry, arch, dest, cacheKey && cacheDir ? { key: cacheKey, dir: cacheDir } : undefined)
 }
 
 /**
  * Downloads pnpm into a temporary directory, adds it to the tool cache and
  * links the tool cache entry into `dest`.
  *
+ * With `actionsCache`, pnpm is restored from the GitHub Actions cache instead
+ * of downloaded when the cache has it and it reports the expected version. A
+ * download is saved to the cache before anything runs from it. Either way the
+ * files go through the tool cache like a download, so a restore that does not
+ * run never becomes a tool cache entry.
+ *
  * When the tool cache cannot take the entry (it is read-only, full, or holds
  * an incomplete entry this action did not create), pnpm is copied into `dest`
  * instead, so the job still gets the pnpm it downloaded.
  */
-async function downloadThroughToolCache (spec: string, registry: string, arch: string, dest: string): Promise<InstalledPnpm> {
-  const staging = await mkdtemp(path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'setup-pnpm-'))
+async function downloadThroughToolCache (
+  spec: string,
+  registry: string,
+  arch: string,
+  dest: string,
+  actionsCache?: { key: string, dir: string }
+): Promise<InstalledPnpm> {
+  let staging: string
+  if (actionsCache) {
+    staging = actionsCache.dir
+    await rm(staging, { recursive: true, force: true })
+  } else {
+    staging = await mkdtemp(path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'setup-pnpm-'))
+  }
   try {
-    const { version } = await downloadPnpm(spec, registry, staging)
+    // An Actions cache entry is only used for an exact version.
+    const exact = semver.valid(spec)
+    let version: string
+    if (actionsCache && exact && await restoreFromActionsCache(staging, actionsCache.key, exact)) {
+      version = exact
+    } else {
+      info(`Downloading pnpm ${spec} from ${registry}`)
+      ;({ version } = await downloadPnpm(spec, registry, staging))
+      if (actionsCache) await saveBinary(staging, actionsCache.key)
+    }
     const binPath = path.join(dest, executableName('pnpm'))
     let toolDir: string
     try {
@@ -91,6 +133,21 @@ async function downloadThroughToolCache (spec: string, registry: string, arch: s
   } finally {
     await rm(staging, { recursive: true, force: true })
   }
+}
+
+/**
+ * Whether pnpm `version` was restored into `dir` and runs. A restore that was
+ * cut short, or an entry that does not run on this runner, is removed so that
+ * pnpm is downloaded again instead of failing the job.
+ */
+async function restoreFromActionsCache (dir: string, key: string, version: string): Promise<boolean> {
+  if (!await restoreBinary(dir, key)) return false
+  try {
+    if (await readVersion(path.join(dir, executableName('pnpm'))) === version) return true
+  } catch {}
+  warning('The cached pnpm executable did not report the expected version; downloading it again')
+  await rm(dir, { recursive: true, force: true })
+  return false
 }
 
 /**
