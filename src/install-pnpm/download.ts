@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { chmod, copyFile, link, mkdir, mkdtemp, rename, rm } from 'node:fs/promises'
+import { chmod, copyFile, cp, link, mkdir, mkdtemp, readdir, rename, rm, symlink } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -21,13 +21,15 @@ export interface InstalledPnpm {
 }
 
 /**
- * Returns the version `spec` resolves to and the path to its pnpm executable,
- * reusing the runner's tool cache on self-hosted runners.
+ * Places the pnpm executable matching `spec` in `dest` and returns the version
+ * it resolved to and the executable's path, reusing the runner's tool cache on
+ * self-hosted runners.
  *
  * pnpm is kept in the tool cache under `pnpm/<version>/<arch>`. An exact
  * `spec` that is already cached is used without downloading anything. A range
  * or a dist-tag is only resolved by downloading it, so it always downloads,
- * and the download is cached under the version it resolved to.
+ * and the download is cached under the version it resolved to. The tool cache
+ * entry is then linked into `dest`, so `dest` holds pnpm either way.
  *
  * When `RUNNER_TOOL_CACHE` is not set (it is outside the runner, e.g. in
  * `run.sh`), pnpm is downloaded into `dest` instead.
@@ -61,9 +63,47 @@ export async function installPnpm (spec: string, registry: string, dest: string)
   // `cacheDir` copies files instead of preserving hard links, so aliases
   // created before caching would each become a full copy of the executable.
   // They are linked inside the tool cache directory instead.
-  const binPath = path.join(entry.toolDir, executableName('pnpm'))
-  await linkAliases(binPath)
-  return { version: entry.version, binPath }
+  await linkAliases(path.join(entry.toolDir, executableName('pnpm')))
+  await linkEntries(entry.toolDir, dest)
+  return { version: entry.version, binPath: path.join(dest, executableName('pnpm')) }
+}
+
+/**
+ * Links every file and directory of a tool cache entry into `dest`, so that
+ * `<dest>/pnpm` keeps working as it did before the tool cache was used.
+ *
+ * Files are hard-linked, which keeps the name the executable checks to decide
+ * what to run and the directory it loads `dist/` from. Across file systems a
+ * file is symlinked instead, or copied on Windows, where creating a symlink
+ * needs a privilege. A directory is symlinked, as a junction on Windows, which
+ * needs no privilege.
+ */
+async function linkEntries (toolDir: string, dest: string): Promise<void> {
+  await mkdir(dest, { recursive: true })
+  const entries = await readdir(toolDir, { withFileTypes: true })
+  await Promise.all(entries.map(entry => entry.isDirectory()
+    ? linkDirectory(path.join(toolDir, entry.name), path.join(dest, entry.name))
+    : linkFile(path.join(toolDir, entry.name), path.join(dest, entry.name))))
+}
+
+async function linkDirectory (source: string, target: string): Promise<void> {
+  try {
+    await symlink(source, target, 'junction')
+  } catch {
+    await cp(source, target, { recursive: true })
+  }
+}
+
+async function linkFile (source: string, target: string): Promise<void> {
+  try {
+    await link(source, target)
+  } catch {
+    if (process.platform === 'win32') {
+      await copyFile(source, target)
+    } else {
+      await symlink(source, target)
+    }
+  }
 }
 
 /**

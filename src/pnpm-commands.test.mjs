@@ -30,7 +30,7 @@ const { getInputs, runPnpmInstall, pruneStore, resolveCacheDependencyPath } = bu
 
 const root = mkdtempSync(path.join(process.cwd(), '.pnpm-commands-test-'))
 const dest = path.join(root, 'pnpm home & tools')
-// pnpm runs from the tool cache, not from dest.
+// The executable is passed in, so it is found even outside dest.
 const toolDir = path.join(root, 'tool cache', 'pnpm')
 const pnpmBin = path.join(toolDir, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
 const project = path.join(root, 'project')

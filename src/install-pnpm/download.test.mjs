@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
@@ -87,7 +87,7 @@ test('a miss downloads pnpm and adds it to the tool cache', async () => {
   const installed = await installPnpm('12.8.1', registry, dest)
 
   const entry = path.join(toolCache, 'pnpm', '12.8.1', os.arch())
-  assert.deepEqual(installed, { version: '12.8.1', binPath: path.join(entry, exe('pnpm')) })
+  assert.deepEqual(installed, { version: '12.8.1', binPath: path.join(dest, exe('pnpm')) })
   assert.deepEqual(globalThis.downloads, ['12.8.1'])
   assert.ok(existsSync(`${entry}.complete`))
   assert.ok(existsSync(path.join(entry, 'dist', 'pnpm.cjs')))
@@ -95,16 +95,41 @@ test('a miss downloads pnpm and adds it to the tool cache', async () => {
   for (const alias of aliases) {
     assert.equal(readFileSync(path.join(entry, exe(alias)), 'utf8'), 'pnpm 12.8.1')
   }
-  // The staging directory is removed, and nothing is written to dest.
   assert.deepEqual(readdirSync(process.env.RUNNER_TEMP), [])
-  assert.ok(!existsSync(dest))
+})
+
+test('dest links to the tool cache entry instead of holding a copy', async () => {
+  await installPnpm('12.8.1', registry, dest)
+
+  const entry = path.join(toolCache, 'pnpm', '12.8.1', os.arch())
+  assert.deepEqual(readdirSync(dest).sort(), readdirSync(entry).sort())
+  for (const name of ['pnpm', ...aliases]) {
+    // A hard link shares the inode, so the file is not stored twice.
+    assert.equal(statSync(path.join(dest, exe(name))).ino, statSync(path.join(entry, exe(name))).ino)
+  }
+  assert.ok(lstatSync(path.join(dest, 'dist')).isSymbolicLink())
+  assert.ok(existsSync(path.join(dest, 'dist', 'pnpm.cjs')))
+})
+
+test('removing dest leaves the tool cache entry intact', async () => {
+  await installPnpm('12.8.1', registry, dest)
+  rmSync(dest, { recursive: true, force: true })
+
+  const entry = path.join(toolCache, 'pnpm', '12.8.1', os.arch())
+  assert.equal(readFileSync(path.join(entry, exe('pnpm')), 'utf8'), 'pnpm 12.8.1')
+  assert.ok(existsSync(path.join(entry, 'dist', 'pnpm.cjs')))
+
+  await installPnpm('12.8.1', registry, dest)
+  assert.equal(readFileSync(path.join(dest, exe('pnpm')), 'utf8'), 'pnpm 12.8.1')
+  assert.deepEqual(globalThis.downloads, ['12.8.1'])
 })
 
 test('a hit uses the cached pnpm without downloading', async () => {
   await installPnpm('12.8.1', registry, dest)
+  rmSync(dest, { recursive: true, force: true })
   const installed = await installPnpm('12.8.1', registry, dest)
 
-  assert.equal(installed.binPath, path.join(toolCache, 'pnpm', '12.8.1', os.arch(), exe('pnpm')))
+  assert.equal(installed.binPath, path.join(dest, exe('pnpm')))
   assert.deepEqual(globalThis.downloads, ['12.8.1'])
 })
 
@@ -127,7 +152,8 @@ test('musl hosts use the <arch>-musl tool cache entry', async () => {
 
   const installed = await installPnpm('12.8.1', registry, dest)
 
-  assert.equal(installed.binPath, path.join(toolCache, 'pnpm', '12.8.1', `${os.arch()}-musl`, exe('pnpm')))
+  assert.ok(existsSync(`${path.join(toolCache, 'pnpm', '12.8.1', `${os.arch()}-musl`)}.complete`))
+  assert.equal(readFileSync(installed.binPath, 'utf8'), 'pnpm 12.8.1')
   assert.deepEqual(globalThis.downloads, ['12.8.1'])
 })
 
@@ -136,7 +162,8 @@ test('a range is downloaded and cached under the version it resolved to', async 
 
   const installed = await installPnpm('^12.0.0', registry, dest)
 
-  assert.deepEqual(installed, { version: '12.8.2', binPath: path.join(toolCache, 'pnpm', '12.8.2', os.arch(), exe('pnpm')) })
+  assert.deepEqual(installed, { version: '12.8.2', binPath: path.join(dest, exe('pnpm')) })
+  assert.ok(existsSync(`${path.join(toolCache, 'pnpm', '12.8.2', os.arch())}.complete`))
   assert.deepEqual(globalThis.downloads, ['^12.0.0'])
 })
 
@@ -146,8 +173,8 @@ test('a range that resolves to a cached version keeps the cached entry', async (
 
   const installed = await installPnpm('latest', registry, dest)
 
-  assert.equal(installed.binPath, path.join(entry, exe('pnpm')))
   assert.equal(readFileSync(installed.binPath, 'utf8'), 'cached pnpm 12.8.2')
+  assert.equal(readFileSync(path.join(entry, exe('pnpm')), 'utf8'), 'cached pnpm 12.8.2')
 })
 
 test('without RUNNER_TOOL_CACHE, pnpm is downloaded into dest', async () => {

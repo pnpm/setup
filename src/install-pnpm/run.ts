@@ -12,7 +12,7 @@ import { Inputs } from '../inputs/index.js'
 import { installPnpm } from './download.js'
 
 export interface SelfInstallerResult {
-  /** The pnpm executable. It is in the tool cache when the runner has one, not in `dest`. */
+  /** The pnpm executable in `dest`. */
   pnpmBin: string
   binDest: string
   pnpmHome: string
@@ -28,7 +28,6 @@ export async function runSelfInstaller (inputs: Inputs): Promise<SelfInstallerRe
   // (fixed in alpha.18, but users may pin older versions).
   await mkdir(path.join(dest, 'bin'), { recursive: true })
   const { version: installedVersion, binPath: pnpmBin } = await installPnpm(versionSpec, registry, dest)
-  const binDest = path.dirname(pnpmBin)
 
   // Sanity check — catches a binary that can't run on this system (e.g. a
   // glibc build on a musl-only distro) with a clear error.
@@ -37,18 +36,15 @@ export async function runSelfInstaller (inputs: Inputs): Promise<SelfInstallerRe
     throw new Error(`The installed pnpm reports version ${actualVersion}, expected ${installedVersion}`)
   }
 
-  // pnpm runs from the tool cache (or from dest when there is none), and dest
-  // is PNPM_HOME. `pnpm runtime set -g` installs runtime binaries into
-  // $PNPM_HOME/bin, and `pnpm self-update` puts its shims there. addPath
-  // prepends, so each later call takes PATH precedence over the earlier ones.
-  // That order lets a self-updated pnpm in dest/bin run instead of the
-  // executable this action installed.
-  if (binDest !== dest) addPath(binDest)
+  // dest doubles as PNPM_HOME: `pnpm runtime set -g` installs runtime
+  // binaries into $PNPM_HOME/bin and `pnpm self-update` places its shims
+  // there. dest/bin is added after dest so it gets higher PATH precedence —
+  // a self-updated pnpm must win over the executable this action installed.
   addPath(dest)
   addPath(path.join(dest, 'bin'))
   exportVariable('PNPM_HOME', dest)
 
-  return { pnpmBin, binDest, pnpmHome: dest }
+  return { pnpmBin, binDest: dest, pnpmHome: dest }
 }
 
 /**
