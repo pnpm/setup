@@ -4,14 +4,16 @@ import { mkdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 import util from 'node:util'
 
-import { addPath, exportVariable, info } from '@actions/core'
+import { addPath, exportVariable } from '@actions/core'
 import { readProjectPin } from 'get-pnpm'
 import { parse as parseYaml } from 'yaml'
 
 import { Inputs } from '../inputs/index.js'
-import { downloadPnpm } from './download.js'
+import { installPnpm } from './download.js'
 
 export interface SelfInstallerResult {
+  /** The pnpm executable in `dest`. */
+  pnpmBin: string
   binDest: string
   pnpmHome: string
 }
@@ -19,14 +21,13 @@ export interface SelfInstallerResult {
 export async function runSelfInstaller (inputs: Inputs): Promise<SelfInstallerResult> {
   const { dest, registry } = inputs
   const versionSpec = selectVersionSpec(inputs)
-  info(`Downloading pnpm ${versionSpec} from ${registry}`)
 
   await rm(dest, { recursive: true, force: true })
   // Create dest/bin upfront: pnpm ≤ 12.0.0-alpha.17 refuses to run
   // `pnpm runtime set -g` when the global bin directory is missing
   // (fixed in alpha.18, but users may pin older versions).
   await mkdir(path.join(dest, 'bin'), { recursive: true })
-  const { version: installedVersion, binPath: pnpmBin } = await downloadPnpm(versionSpec, registry, dest)
+  const { version: installedVersion, binPath: pnpmBin } = await installPnpm(versionSpec, registry, dest)
 
   // Sanity check — catches a binary that can't run on this system (e.g. a
   // glibc build on a musl-only distro) with a clear error.
@@ -43,7 +44,7 @@ export async function runSelfInstaller (inputs: Inputs): Promise<SelfInstallerRe
   addPath(path.join(dest, 'bin'))
   exportVariable('PNPM_HOME', dest)
 
-  return { binDest: dest, pnpmHome: dest }
+  return { pnpmBin, binDest: dest, pnpmHome: dest }
 }
 
 /**

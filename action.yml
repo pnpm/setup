@@ -28,7 +28,10 @@ inputs:
       for `pnpm install`.
     required: false
   dest:
-    description: Where to store pnpm files
+    description: |
+      Where to store pnpm files. Also used as `PNPM_HOME`. The pnpm
+      executable is kept in the runner's tool cache, reused when the same
+      exact version is requested again, and linked into this directory.
     required: false
     default: ~/setup-pnpm
   runtime:

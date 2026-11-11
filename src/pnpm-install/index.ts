@@ -7,7 +7,7 @@ import { endGroup, info, setFailed, startGroup } from '@actions/core'
 import { Inputs } from '../inputs/index.js'
 import { lockfileDir } from './lockfile.js'
 
-export function runPnpmInstall (inputs: Inputs, runtimeInstalled = Boolean(inputs.runtime)): void {
+export function runPnpmInstall (inputs: Inputs, pnpmBin: string, runtimeInstalled = Boolean(inputs.runtime)): void {
   const args = installArgs(inputs, runtimeInstalled)
   // Every message below quotes this, so it has to name the command actually
   // run, flags included.
@@ -27,7 +27,6 @@ export function runPnpmInstall (inputs: Inputs, runtimeInstalled = Boolean(input
   }
 
   const workingDirectory = path.resolve(GITHUB_WORKSPACE, inputs.workingDirectory)
-  const pnpmBin = path.join(inputs.dest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
   if (inputs.requireLockfile && !hasRequiredLockfile(inputs, GITHUB_WORKSPACE, workingDirectory, pnpmBin)) return
 
   startGroup(`Running ${command}...`)

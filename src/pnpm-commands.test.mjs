@@ -30,9 +30,13 @@ const { getInputs, runPnpmInstall, pruneStore, resolveCacheDependencyPath } = bu
 
 const root = mkdtempSync(path.join(process.cwd(), '.pnpm-commands-test-'))
 const dest = path.join(root, 'pnpm home & tools')
+// The executable is passed in, so it is found even outside dest.
+const toolDir = path.join(root, 'tool cache', 'pnpm')
+const pnpmBin = path.join(toolDir, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
 const project = path.join(root, 'project')
 const record = path.join(root, 'command.json')
 mkdirSync(path.join(dest, 'bin'), { recursive: true })
+mkdirSync(toolDir, { recursive: true })
 mkdirSync(project)
 writeFileSync(path.join(project, 'package.json'), '{}')
 writeFileSync(path.join(project, 'pnpm-lock.yaml'), '')
@@ -40,7 +44,7 @@ writeFileSync(path.join(project, 'pnpm-lock.yaml'), '')
 // A native executable named pnpm proves direct spawning works even when the
 // destination contains spaces or shell metacharacters. Node consumes the
 // fixture named "install" as its script, then passes through the install flags.
-copyFileSync(process.execPath, path.join(dest, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm'))
+copyFileSync(process.execPath, pnpmBin)
 const recorder = `
   const fs = require('node:fs')
   setTimeout(() => {
@@ -102,26 +106,26 @@ beforeEach(testContext => {
   })
   // Simulate the PATH prepared by setup, with self-update's shim first.
   const pathKey = Object.keys(process.env).find(key => key.toUpperCase() === 'PATH') ?? 'PATH'
-  process.env[pathKey] = [path.join(dest, 'bin'), dest, process.env[pathKey]].join(path.delimiter)
+  process.env[pathKey] = [path.join(dest, 'bin'), dest, toolDir, process.env[pathKey]].join(path.delimiter)
   rmSync(record, { force: true })
   rmSync(path.join(root, 'pnpm-lock.yaml'), { force: true })
   writeFileSync(path.join(project, 'pnpm-lock.yaml'), '')
 })
 
-test('install uses the native binary with a relative dest and a separate project directory', () => {
+test('install uses the installed binary, not dest, with a relative dest and a separate project directory', () => {
   const inputs = getInputs()
   assert.equal(inputs.dest, dest)
-  runPnpmInstall(inputs, true)
+  runPnpmInstall(inputs, pnpmBin, true)
   const actual = JSON.parse(readFileSync(record, 'utf8'))
   assert.deepEqual(actual.args, ['--frozen-lockfile', '--no-runtime'])
   assert.equal(actual.cwd, project)
-  assert.equal(path.dirname(actual.executable), dest)
+  assert.equal(path.dirname(actual.executable), toolDir)
 })
 
 test('a standalone project rejects an unrelated parent lockfile before invoking install', () => {
   rmSync(path.join(project, 'pnpm-lock.yaml'))
   writeFileSync(path.join(root, 'pnpm-lock.yaml'), '')
-  runPnpmInstall(getInputs())
+  runPnpmInstall(getInputs(), pnpmBin)
   assert.equal(process.exitCode, 1)
   assert.throws(() => readFileSync(record), { code: 'ENOENT' })
 })
@@ -132,17 +136,17 @@ test('default cache paths follow workspace membership while explicit paths take 
   writeFileSync(path.join(root, 'package.json'), '{}')
   try {
     process.env.PNPM_TEST_WORKSPACE_ROOT = root
-    assert.equal(resolveCacheDependencyPath(getInputs()), 'pnpm-lock.yaml')
+    assert.equal(resolveCacheDependencyPath(getInputs(), pnpmBin), 'pnpm-lock.yaml')
     process.env.INPUT_CACHE = 'false'
     process.env.INPUT_INSTALL = 'false'
-    assert.equal(resolveCacheDependencyPath(getInputs()), 'pnpm-lock.yaml')
+    assert.equal(resolveCacheDependencyPath(getInputs(), pnpmBin), 'pnpm-lock.yaml')
     writeFileSync(workspaceFile, "packages: ['project']\nsharedWorkspaceLockfile: false\n")
     process.env.PNPM_TEST_SHARED_LOCKFILE = 'false'
-    assert.equal(resolveCacheDependencyPath(getInputs()), path.join('project', 'pnpm-lock.yaml'))
+    assert.equal(resolveCacheDependencyPath(getInputs(), pnpmBin), path.join('project', 'pnpm-lock.yaml'))
     process.env.PNPM_TEST_WORKSPACE_ROOT = ''
-    assert.equal(resolveCacheDependencyPath(getInputs()), path.join('project', 'pnpm-lock.yaml'))
+    assert.equal(resolveCacheDependencyPath(getInputs(), pnpmBin), path.join('project', 'pnpm-lock.yaml'))
     process.env['INPUT_CACHE-DEPENDENCY-PATH'] = 'custom/pnpm-lock.yaml'
-    assert.equal(resolveCacheDependencyPath(getInputs()), 'custom/pnpm-lock.yaml')
+    assert.equal(resolveCacheDependencyPath(getInputs(), pnpmBin), 'custom/pnpm-lock.yaml')
   } finally {
     rmSync(workspaceFile, { force: true })
   }
@@ -158,7 +162,7 @@ test('cache-disabled binary setup does not parse workspace configuration', () =>
   })
   try {
     assert.equal(getInputs().cacheDependencyPath, undefined)
-    assert.equal(resolveCacheDependencyPath(getInputs()), path.join('project', 'pnpm-lock.yaml'))
+    assert.equal(resolveCacheDependencyPath(getInputs(), pnpmBin), path.join('project', 'pnpm-lock.yaml'))
   } finally {
     rmSync(workspaceFile, { force: true })
   }
@@ -166,7 +170,7 @@ test('cache-disabled binary setup does not parse workspace configuration', () =>
 
 test('a shared workspace rejects a stale member lockfile when its root lockfile is missing', () => {
   process.env.PNPM_TEST_WORKSPACE_ROOT = root
-  runPnpmInstall(getInputs())
+  runPnpmInstall(getInputs(), pnpmBin)
   assert.equal(process.exitCode, 1)
   assert.throws(() => readFileSync(record), { code: 'ENOENT' })
 })
@@ -175,14 +179,14 @@ test('a workspace member installs using only the root lockfile', () => {
   process.env.PNPM_TEST_WORKSPACE_ROOT = root
   rmSync(path.join(project, 'pnpm-lock.yaml'))
   writeFileSync(path.join(root, 'pnpm-lock.yaml'), '')
-  runPnpmInstall(getInputs())
+  runPnpmInstall(getInputs(), pnpmBin)
   assert.deepEqual(JSON.parse(readFileSync(record, 'utf8')).args, ['--frozen-lockfile'])
 })
 
 test('a workspace with per-project lockfiles installs using the member lockfile', () => {
   process.env.PNPM_TEST_WORKSPACE_ROOT = root
   process.env.PNPM_TEST_SHARED_LOCKFILE = 'false'
-  runPnpmInstall(getInputs())
+  runPnpmInstall(getInputs(), pnpmBin)
   assert.deepEqual(JSON.parse(readFileSync(record, 'utf8')).args, ['--frozen-lockfile'])
 })
 
@@ -194,14 +198,14 @@ test('a workspace with lockfileDir requires, installs from and caches the lockfi
   testContext.after(() => rmSync(locks, { recursive: true, force: true }))
 
   // The root lockfile is not the one pnpm reads.
-  runPnpmInstall(getInputs())
+  runPnpmInstall(getInputs(), pnpmBin)
   assert.equal(process.exitCode, 1)
   assert.throws(() => readFileSync(record), { code: 'ENOENT' })
 
   writeFileSync(path.join(locks, 'pnpm-lock.yaml'), '')
-  runPnpmInstall(getInputs())
+  runPnpmInstall(getInputs(), pnpmBin)
   assert.deepEqual(JSON.parse(readFileSync(record, 'utf8')).args, ['--frozen-lockfile'])
-  assert.equal(resolveCacheDependencyPath(getInputs()), path.join('locks', 'pnpm-lock.yaml'))
+  assert.equal(resolveCacheDependencyPath(getInputs(), pnpmBin), path.join('locks', 'pnpm-lock.yaml'))
 })
 
 test('pruning awaits the self-updated shim ahead of the original executable on PATH', async () => {

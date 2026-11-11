@@ -20,7 +20,7 @@ const { outputFiles } = await build({
       build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents:
         args.path === '@actions/core' ? 'export const info = () => {}; export const addPath = () => {}; export const exportVariable = () => {}' :
           args.path === './download.js' ? `
-          export async function downloadPnpm(spec) {
+          export async function installPnpm(spec) {
             globalThis.selectedSpec = spec
             const version = /^\\d+\\.\\d+\\.\\d+$/.test(spec) ? spec : '12.8.2'
             return { version, binPath: version }
