@@ -148,6 +148,18 @@ test('aliases are added to a cached entry, and existing ones are left alone', as
   }
 })
 
+test('an alias another job is still copying is not linked into dest', async () => {
+  const entry = seedCacheEntry('12.8.1')
+  writeFileSync(path.join(entry, `${exe('pnpx')}.12345.partial`), 'half a copy')
+
+  await installPnpm('12.8.1', registry, dest)
+
+  assert.ok(!readdirSync(dest).some(name => name.endsWith('.partial')))
+  for (const alias of aliases) {
+    assert.equal(readFileSync(path.join(dest, exe(alias)), 'utf8'), 'cached pnpm 12.8.1')
+  }
+})
+
 test('musl hosts use the <arch>-musl tool cache entry', async () => {
   seedCacheEntry('12.8.1')
   globalThis.musl = true

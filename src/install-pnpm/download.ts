@@ -154,7 +154,11 @@ async function addToToolCache (staging: string, version: string, arch: string): 
  */
 async function linkEntries (toolDir: string, dest: string): Promise<void> {
   await mkdir(dest, { recursive: true })
-  const entries = await readdir(toolDir, { withFileTypes: true })
+  // A `.partial` file is an alias another job is still copying, and it can be
+  // renamed away at any moment. The finished aliases are already present,
+  // because they are linked before the entry is.
+  const entries = (await readdir(toolDir, { withFileTypes: true }))
+    .filter(entry => !entry.name.endsWith('.partial'))
   await Promise.all(entries.map(entry => entry.isDirectory()
     ? linkDirectory(path.join(toolDir, entry.name), path.join(dest, entry.name))
     : linkFile(path.join(toolDir, entry.name), path.join(dest, entry.name))))
