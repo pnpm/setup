@@ -19,7 +19,7 @@ const { outputFiles } = await build({
       build.onResolve({ filter: /^(get-pnpm|\.\/musl\.js|@actions\/core)$/ }, args =>
         args.path === '@actions/core' && !args.importer.endsWith('download.ts') ? undefined : { path: args.path, namespace: 'fixture' })
       build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents:
-        args.path === '@actions/core' ? 'export const info = () => {}' :
+        args.path === '@actions/core' ? 'export const info = () => {}; export const warning = message => globalThis.warnings.push(message)' :
           args.path === './musl.js' ? 'export const isMusl = () => globalThis.musl === true' : `
           import { mkdirSync, writeFileSync } from 'node:fs'
           import path from 'node:path'
@@ -59,6 +59,7 @@ beforeEach(() => {
   process.env.RUNNER_TOOL_CACHE = toolCache
   process.env.RUNNER_TEMP = path.join(root, 'temp')
   globalThis.downloads = []
+  globalThis.warnings = []
   globalThis.musl = false
   globalThis.resolvesTo = undefined
 })
@@ -70,6 +71,7 @@ afterEach(() => {
     else process.env[name] = value
   }
   delete globalThis.downloads
+  delete globalThis.warnings
   delete globalThis.musl
   delete globalThis.resolvesTo
 })
@@ -175,6 +177,55 @@ test('a range that resolves to a cached version keeps the cached entry', async (
 
   assert.equal(readFileSync(installed.binPath, 'utf8'), 'cached pnpm 12.8.2')
   assert.equal(readFileSync(path.join(entry, exe('pnpm')), 'utf8'), 'cached pnpm 12.8.2')
+})
+
+test('concurrent installs of the same version share one complete entry', async () => {
+  const dests = [path.join(root, 'dest-a'), path.join(root, 'dest-b'), path.join(root, 'dest-c')]
+
+  const installed = await Promise.all(dests.map(jobDest => installPnpm('12.8.1', registry, jobDest)))
+
+  // Every job missed the cache, so all of them raced to add the entry.
+  assert.deepEqual(globalThis.downloads, ['12.8.1', '12.8.1', '12.8.1'])
+  const versionDir = path.join(toolCache, 'pnpm', '12.8.1')
+  assert.deepEqual(readdirSync(versionDir).sort(), [os.arch(), `${os.arch()}.complete`])
+  const cachedBin = path.join(versionDir, os.arch(), exe('pnpm'))
+  for (const { binPath } of installed) {
+    // No job deleted and re-created the entry under another job: every dest
+    // links to the executable that is in the tool cache now.
+    assert.equal(statSync(binPath).ino, statSync(cachedBin).ino)
+    assert.equal(readFileSync(binPath, 'utf8'), 'pnpm 12.8.1')
+    assert.ok(existsSync(path.join(path.dirname(binPath), 'dist', 'pnpm.cjs')))
+  }
+  assert.deepEqual(globalThis.warnings, [])
+})
+
+test('an unwritable tool cache falls back to installing into dest', async () => {
+  // A file where the tool cache directory should be makes every write fail.
+  writeFileSync(toolCache, '')
+
+  const installed = await installPnpm('12.8.1', registry, dest)
+
+  assert.deepEqual(installed, { version: '12.8.1', binPath: path.join(dest, exe('pnpm')) })
+  assert.equal(readFileSync(installed.binPath, 'utf8'), 'pnpm 12.8.1')
+  assert.ok(existsSync(path.join(dest, 'dist', 'pnpm.cjs')))
+  for (const alias of aliases) {
+    assert.equal(statSync(path.join(dest, exe(alias))).ino, statSync(installed.binPath).ino)
+  }
+  assert.equal(globalThis.warnings.length, 1)
+  assert.deepEqual(readdirSync(process.env.RUNNER_TEMP), [])
+})
+
+test('an incomplete entry left by something else is not marked complete or replaced', async () => {
+  const entry = path.join(toolCache, 'pnpm', '12.8.1', os.arch())
+  mkdirSync(entry, { recursive: true })
+  writeFileSync(path.join(entry, exe('pnpm')), 'partial')
+
+  const installed = await installPnpm('12.8.1', registry, dest)
+
+  assert.equal(readFileSync(installed.binPath, 'utf8'), 'pnpm 12.8.1')
+  assert.equal(readFileSync(path.join(entry, exe('pnpm')), 'utf8'), 'partial')
+  assert.ok(!existsSync(`${entry}.complete`))
+  assert.equal(globalThis.warnings.length, 1)
 })
 
 test('without RUNNER_TOOL_CACHE, pnpm is downloaded into dest', async () => {

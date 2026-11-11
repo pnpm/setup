@@ -1,10 +1,10 @@
 import { existsSync } from 'node:fs'
-import { chmod, copyFile, cp, link, mkdir, mkdtemp, readdir, rename, rm, symlink } from 'node:fs/promises'
+import { chmod, copyFile, cp, link, mkdir, mkdtemp, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { info } from '@actions/core'
-import { cacheDir, find } from '@actions/tool-cache'
+import { info, warning } from '@actions/core'
+import { find } from '@actions/tool-cache'
 import { downloadPnpm as downloadVerifiedPnpm } from 'get-pnpm'
 import semver from 'semver'
 
@@ -52,20 +52,88 @@ export async function installPnpm (spec: string, registry: string, dest: string)
 
   const arch = toolCacheArch()
   const cached = exact ? find('pnpm', exact, arch) : ''
-  let entry: { version: string, toolDir: string }
   if (exact && cached) {
     info(`Found pnpm ${exact} in the tool cache`)
-    entry = { version: exact, toolDir: cached }
-  } else {
-    info(`Downloading pnpm ${spec} from ${registry}`)
-    entry = await downloadToToolCache(spec, registry, arch)
+    // Entries this action creates already have their aliases, so this only
+    // writes to the tool cache for an entry created some other way.
+    await linkAliases(path.join(cached, executableName('pnpm')))
+    await linkEntries(cached, dest)
+    return { version: exact, binPath: path.join(dest, executableName('pnpm')) }
   }
-  // `cacheDir` copies files instead of preserving hard links, so aliases
-  // created before caching would each become a full copy of the executable.
-  // They are linked inside the tool cache directory instead.
-  await linkAliases(path.join(entry.toolDir, executableName('pnpm')))
-  await linkEntries(entry.toolDir, dest)
-  return { version: entry.version, binPath: path.join(dest, executableName('pnpm')) }
+  info(`Downloading pnpm ${spec} from ${registry}`)
+  return downloadThroughToolCache(spec, registry, arch, dest)
+}
+
+/**
+ * Downloads pnpm into a temporary directory, adds it to the tool cache and
+ * links the tool cache entry into `dest`.
+ *
+ * When the tool cache cannot take the entry (it is read-only, full, or holds
+ * an incomplete entry this action did not create), pnpm is copied into `dest`
+ * instead, so the job still gets the pnpm it downloaded.
+ */
+async function downloadThroughToolCache (spec: string, registry: string, arch: string, dest: string): Promise<InstalledPnpm> {
+  const staging = await mkdtemp(path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'setup-pnpm-'))
+  try {
+    const { version } = await downloadPnpm(spec, registry, staging)
+    const binPath = path.join(dest, executableName('pnpm'))
+    let toolDir: string
+    try {
+      toolDir = await addToToolCache(staging, version, arch)
+    } catch (err) {
+      warning(`pnpm ${version} could not be added to the tool cache, so it is installed into ${dest} only: ${(err as Error).message}`)
+      await cp(staging, dest, { recursive: true })
+      await linkAliases(binPath)
+      return { version, binPath }
+    }
+    await linkEntries(toolDir, dest)
+    return { version, binPath }
+  } finally {
+    await rm(staging, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Adds the pnpm in `staging` to the tool cache as `pnpm/<version>/<arch>` and
+ * returns the entry's directory.
+ *
+ * Jobs that share a tool cache can add the same version at the same time, and
+ * `find` only returns an entry whose `.complete` marker exists. The entry is
+ * therefore filled in a temporary directory beside it, the marker is written,
+ * and then the directory is renamed into place, which is atomic. No job
+ * deletes or overwrites an entry, because another job may be running it: the
+ * job that loses the rename uses the winner's entry, and a range or a dist-tag
+ * that resolves to a version that is already cached uses that entry.
+ *
+ * The aliases are linked after the copy, because copying turns hard links
+ * into separate copies of the executable.
+ */
+async function addToToolCache (staging: string, version: string, arch: string): Promise<string> {
+  // `find` looks the entry up under the cleaned version.
+  const toolDir = path.join(process.env.RUNNER_TOOL_CACHE!, 'pnpm', semver.clean(version) ?? version, arch)
+  const existing = find('pnpm', version, arch)
+  if (existing) return existing
+  // A directory without a marker was not left by this action, which writes
+  // the marker before the directory appears. It may be incomplete.
+  if (existsSync(toolDir)) throw new Error(`${toolDir} exists but is not marked complete`)
+
+  await mkdir(path.dirname(toolDir), { recursive: true })
+  const partial = await mkdtemp(`${toolDir}.partial-`)
+  try {
+    await cp(staging, partial, { recursive: true })
+    await linkAliases(path.join(partial, executableName('pnpm')))
+    await writeFile(`${toolDir}.complete`, '')
+    try {
+      await rename(partial, toolDir)
+    } catch (err) {
+      const winner = find('pnpm', version, arch)
+      if (!winner) throw err
+      return winner
+    }
+    return toolDir
+  } finally {
+    await rm(partial, { recursive: true, force: true })
+  }
 }
 
 /**
@@ -73,10 +141,11 @@ export async function installPnpm (spec: string, registry: string, dest: string)
  * `<dest>/pnpm` keeps working as it did before the tool cache was used.
  *
  * Files are hard-linked, which keeps the name the executable checks to decide
- * what to run and the directory it loads `dist/` from. Across file systems a
- * file is symlinked instead, or copied on Windows, where creating a symlink
- * needs a privilege. A directory is symlinked, as a junction on Windows, which
- * needs no privilege.
+ * what to run and the directory it loads `dist/` from. Where a hard link is
+ * not possible (across file systems, for example), a file is symlinked
+ * instead, or copied on Windows, where creating a symlink needs a privilege.
+ * A directory is symlinked, as a junction on Windows, which needs no
+ * privilege, and copied where that is not possible.
  */
 async function linkEntries (toolDir: string, dest: string): Promise<void> {
   await mkdir(dest, { recursive: true })
@@ -89,7 +158,8 @@ async function linkEntries (toolDir: string, dest: string): Promise<void> {
 async function linkDirectory (source: string, target: string): Promise<void> {
   try {
     await symlink(source, target, 'junction')
-  } catch {
+  } catch (err) {
+    if (!cannotLink(err)) throw err
     await cp(source, target, { recursive: true })
   }
 }
@@ -97,7 +167,8 @@ async function linkDirectory (source: string, target: string): Promise<void> {
 async function linkFile (source: string, target: string): Promise<void> {
   try {
     await link(source, target)
-  } catch {
+  } catch (err) {
+    if (!cannotLink(err)) throw err
     if (process.platform === 'win32') {
       await copyFile(source, target)
     } else {
@@ -107,24 +178,12 @@ async function linkFile (source: string, target: string): Promise<void> {
 }
 
 /**
- * Downloads pnpm into a temporary directory and copies it into the tool cache.
- *
- * `cacheDir` writes the `.complete` marker that `find` checks only after the
- * copy finishes, so a failed download or copy leaves no entry for a later run
- * to find.
+ * Whether a link failed because the file system or the platform does not
+ * allow it there, as opposed to a problem a copy would hit too, such as the
+ * target already existing.
  */
-async function downloadToToolCache (spec: string, registry: string, arch: string): Promise<{ version: string, toolDir: string }> {
-  const staging = await mkdtemp(path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'setup-pnpm-'))
-  try {
-    const { version } = await downloadPnpm(spec, registry, staging)
-    // A range or a dist-tag can resolve to a version that is already cached.
-    // That entry is kept: `cacheDir` deletes an existing entry first, and
-    // another job on this runner may be running it.
-    const toolDir = find('pnpm', version, arch) || await cacheDir(staging, 'pnpm', version, arch)
-    return { version, toolDir }
-  } finally {
-    await rm(staging, { recursive: true, force: true })
-  }
+function cannotLink (err: unknown): boolean {
+  return ['EXDEV', 'EPERM', 'EACCES', 'ENOTSUP', 'EMLINK', 'ENOSYS'].includes((err as NodeJS.ErrnoException).code ?? '')
 }
 
 /**
