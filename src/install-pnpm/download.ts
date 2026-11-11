@@ -112,7 +112,12 @@ async function addToToolCache (staging: string, version: string, arch: string): 
   // `find` looks the entry up under the cleaned version.
   const toolDir = path.join(process.env.RUNNER_TOOL_CACHE!, 'pnpm', semver.clean(version) ?? version, arch)
   const existing = find('pnpm', version, arch)
-  if (existing) return existing
+  if (existing) {
+    // As on an exact-version hit, an entry created some other way may lack
+    // the aliases.
+    await linkAliases(path.join(existing, executableName('pnpm')))
+    return existing
+  }
   // A directory without a marker was not left by this action, which writes
   // the marker before the directory appears. It may be incomplete.
   if (existsSync(toolDir)) throw new Error(`${toolDir} exists but is not marked complete`)

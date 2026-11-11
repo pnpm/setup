@@ -177,6 +177,9 @@ test('a range that resolves to a cached version keeps the cached entry', async (
 
   assert.equal(readFileSync(installed.binPath, 'utf8'), 'cached pnpm 12.8.2')
   assert.equal(readFileSync(path.join(entry, exe('pnpm')), 'utf8'), 'cached pnpm 12.8.2')
+  for (const alias of aliases) {
+    assert.equal(readFileSync(path.join(dest, exe(alias)), 'utf8'), 'cached pnpm 12.8.2')
+  }
 })
 
 test('concurrent installs of the same version share one complete entry', async () => {
