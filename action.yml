@@ -75,9 +75,9 @@ inputs:
   cache:
     description: |
       Whether to cache the pnpm store directory, keyed on the lockfile's
-      content hash, and restore it before installing the runtimes. The
-      results of pnpm's lockfile verification are cached either way — see
-      the README.
+      content hash, and restore it before installing the runtimes. When the
+      pnpm version is exact, the pnpm executable is cached too. The results
+      of pnpm's lockfile verification are cached either way — see the README.
     required: false
     default: 'false'
   save-cache:
