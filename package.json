@@ -16,7 +16,7 @@
     "@types/node": "^26.6.6",
     "@types/semver": "^7.8.0",
     "get-pnpm": "^0.0.11",
-    "semver": "^7.8.5",
+    "semver": "^7.8.6",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
@@ -27,6 +27,6 @@
     "eslint-plugin-jest": "^29.17.0",
     "eslint-plugin-regexp": "^3.3.3",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "typescript-eslint": "^8.72.1"
+    "typescript-eslint": "^8.72.2"
   }
 }
