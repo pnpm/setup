@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import os from 'node:os'
 import path from 'node:path'
 import { after, beforeEach, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -111,6 +112,52 @@ beforeEach(testContext => {
   rmSync(path.join(root, 'pnpm-lock.yaml'), { force: true })
   writeFileSync(path.join(project, 'pnpm-lock.yaml'), '')
 })
+
+const home = path.join(root, 'home & user')
+for (const [input, expected, homeDirectory = home] of [
+  ['~', home],
+  ['~/child', path.join(home, 'child')],
+  ['~+', process.cwd()],
+  ['~+/child', path.join(process.cwd(), 'child')],
+  ['relative/child', 'relative/child'],
+  ['./child', './child'],
+  [path.join(root, 'absolute'), path.join(root, 'absolute')],
+  ['parent/~/child', 'parent/~/child'],
+  ['~', '~', ''],
+  ['~/child', '~/child', ''],
+  ['~+', process.cwd(), ''],
+  ['~+/child', path.join(process.cwd(), 'child'), ''],
+]) {
+  test(`getInputs resolves ${JSON.stringify(input)} with ${homeDirectory ? 'a' : 'no'} home directory`, testContext => {
+    testContext.mock.method(os, 'homedir', () => homeDirectory)
+    Object.assign(process.env, {
+      INPUT_DEST: input,
+      'INPUT_WORKING-DIRECTORY': input,
+      'INPUT_CACHE-DEPENDENCY-PATH': input,
+    })
+
+    const inputs = getInputs()
+    assert.equal(inputs.dest, path.resolve(expected))
+    assert.equal(inputs.workingDirectory, expected)
+    assert.equal(inputs.packageJsonFile, path.join(expected, 'package.json'))
+    assert.equal(inputs.cacheDependencyPath, expected)
+  })
+}
+
+for (const [input, expected] of [
+  ['~/child/package.json', path.join(home, 'child', 'package.json')],
+  ['~+/child/package.json', path.join(process.cwd(), 'child', 'package.json')],
+]) {
+  test(`getInputs expands the deprecated manifest path ${input}`, testContext => {
+    testContext.mock.method(os, 'homedir', () => home)
+    process.env['INPUT_WORKING-DIRECTORY'] = ''
+    process.env['INPUT_PACKAGE-JSON-FILE'] = input
+
+    const inputs = getInputs()
+    assert.equal(inputs.packageJsonFile, expected)
+    assert.equal(inputs.workingDirectory, path.dirname(expected))
+  })
+}
 
 test('install uses the installed binary, not dest, with a relative dest and a separate project directory', () => {
   const inputs = getInputs()
