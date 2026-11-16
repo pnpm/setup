@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { getCacheKeyPrefix, getRestoreKeys, getSaveCacheKey, isLockfileExactHit } from './keys.ts'
+import { getCacheKeyPrefix, getSaveCacheKey, isLockfileExactHit } from './keys.ts'
 
 test('moving runtime selectors produce distinct key prefixes', () => {
   const previous = getCacheKeyPrefix('Linux', 'x64', [{ name: 'node', version: 'lts' }])
@@ -98,13 +98,6 @@ test('a version change in any runtime changes the save key', () => {
   )
 
   assert.notEqual(before, after)
-})
-
-test('restore keys try the exact lockfile match before falling back to any store for the runtime', () => {
-  const keyPrefix = getCacheKeyPrefix('Linux', 'x64', [{ name: 'node', version: '24' }])
-  const lockfileKeyPrefix = `${keyPrefix}lockfile-hash-`
-
-  assert.deepEqual(getRestoreKeys(lockfileKeyPrefix, keyPrefix), [lockfileKeyPrefix, keyPrefix])
 })
 
 test('cache-hit is true only when the restored key matches the current lockfile exactly', () => {

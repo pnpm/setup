@@ -27,10 +27,6 @@ export function getSaveCacheKeyPrefix (
   return `${lockfileKeyPrefix}${runtimeVersionKey}`
 }
 
-export function getRestoreKeys (lockfileKeyPrefix: string, keyPrefix: string): string[] {
-  return [lockfileKeyPrefix, keyPrefix]
-}
-
 export function isLockfileExactHit (restoredKey: string | undefined, lockfileKeyPrefix: string): boolean {
   return restoredKey?.startsWith(lockfileKeyPrefix) ?? false
 }

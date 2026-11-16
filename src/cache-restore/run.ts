@@ -13,7 +13,7 @@ import { restoreVerificationCache } from '../lockfile-verification-cache/index.j
 import { lockfileDir } from '../pnpm-install/lockfile.js'
 import { fingerprintStore, statStore } from '../store-fingerprint/index.js'
 import { removeWindowsExtendedPathPrefix } from '../windows-path/index.js'
-import { getCacheKeyPrefix, getRestoreKeys, getSaveCacheKey, getSaveCacheKeyPrefix, isLockfileExactHit } from './keys.js'
+import { getCacheKeyPrefix, getSaveCacheKey, getSaveCacheKeyPrefix, isLockfileExactHit } from './keys.js'
 
 export interface RestoredCache {
   readonly lockfileKeyPrefix: string
@@ -67,9 +67,13 @@ async function runRestoreStoreCache (
 
   const keyPrefix = getCacheKeyPrefix(process.env.RUNNER_OS, os.arch(), runtimes)
   const lockfileKeyPrefix = `${keyPrefix}${fileHash}-`
-  const restoreKeys = getRestoreKeys(lockfileKeyPrefix, keyPrefix)
 
-  const restoredKey = await restoreCache([cachePath], lockfileKeyPrefix, restoreKeys)
+  // Two lookups, not one with both prefixes: GitHub tries every key in the
+  // current scope before the default branch's, so a single lookup would
+  // prefer any older store in a pull request's scope over an entry for the
+  // current lockfile on the default branch.
+  const restoredKey = await restoreCache([cachePath], lockfileKeyPrefix, [lockfileKeyPrefix]) ??
+    await restoreCache([cachePath], keyPrefix, [keyPrefix])
 
   if (!restoredKey) {
     info('Cache is not found')
