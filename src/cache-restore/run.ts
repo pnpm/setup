@@ -12,6 +12,7 @@ import { RuntimeRequest } from '../install-runtime/index.js'
 import { restoreVerificationCache } from '../lockfile-verification-cache/index.js'
 import { lockfileDir } from '../pnpm-install/lockfile.js'
 import { fingerprintStore, statStore } from '../store-fingerprint/index.js'
+import { claimStore } from '../store-owner/index.js'
 import { removeWindowsExtendedPathPrefix } from '../windows-path/index.js'
 import { getCacheKeyPrefix, getRestoreKeys, getSaveCacheKey, getSaveCacheKeyPrefix, isLockfileExactHit } from './keys.js'
 
@@ -64,6 +65,9 @@ async function runRestoreStoreCache (
 ): Promise<RestoredCache> {
   const cachePath = await getCacheDirectory()
   saveState('cache_path', cachePath)
+  const storeOwnerId = randomUUID()
+  await claimStore(cachePath, storeOwnerId)
+  saveState('cache_store_owner', storeOwnerId)
 
   const keyPrefix = getCacheKeyPrefix(process.env.RUNNER_OS, os.arch(), runtimes)
   const lockfileKeyPrefix = `${keyPrefix}${fileHash}-`
