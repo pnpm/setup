@@ -101,11 +101,21 @@ test('verification caching remains enabled when store caching and installation a
   assert.equal(cache.restoreCache.mock.callCount(), 0)
 })
 
-test('restore asks for the current lockfile before the broader runtime fallback', async () => {
+// Each lookup searches every scope, so the lockfile prefix gets a lookup of its
+// own: a fallback entry in the pull request's scope must not beat an entry for
+// the current lockfile on the default branch.
+test('restore looks up the current lockfile on its own before the broader runtime fallback', async () => {
   await runRestoreCache(inputs, pnpmBin, runtimes)
-  assert.deepEqual(cache.restoreCache.mock.calls[0].arguments, [
-    ['/pnpm-store'], lockfileKeyPrefix, [lockfileKeyPrefix, keyPrefix],
+  assert.deepEqual(cache.restoreCache.mock.calls.map(call => call.arguments), [
+    [['/pnpm-store'], lockfileKeyPrefix, [lockfileKeyPrefix]],
+    [['/pnpm-store'], keyPrefix, [keyPrefix]],
   ])
+})
+
+test('an entry for the current lockfile skips the fallback lookup', async () => {
+  cache.restoreCache.mock.mockImplementation(async () => `${lockfileKeyPrefix}previous-invocation`)
+  await runRestoreCache(inputs, pnpmBin, runtimes)
+  assert.equal(cache.restoreCache.mock.callCount(), 1)
 })
 
 for (const [label, restoredKey, expectedHit] of [
@@ -114,7 +124,7 @@ for (const [label, restoredKey, expectedHit] of [
   ['cache miss', undefined, false],
 ]) {
   test(`${label}: reports cache-hit and publishes a fresh store`, async () => {
-    cache.restoreCache.mock.mockImplementation(async () => restoredKey)
+    cache.restoreCache.mock.mockImplementation(async (_paths, _key, [prefix]) => restoredKey?.startsWith(prefix) ? restoredKey : undefined)
     const restored = await runRestoreCache(inputs, pnpmBin, runtimes)
     finalizeCache(restored, runtimes)
     assert.equal(core.outputs.get('cache-hit'), expectedHit)
