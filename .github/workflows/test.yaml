@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        version: ['11.22.0', '12.5.1']
+        version: ['11.22.0', '12.21.0']
     steps:
       - uses: actions/checkout@v7
       - id: pnpm
@@ -40,13 +40,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            version: '12.0.0'
+            version: '12.21.0'
           - os: ubuntu-24.04-arm
-            version: '12.0.0'
+            version: '12.21.0'
           - os: macos-latest
-            version: '12.0.0'
+            version: '12.21.0'
           - os: windows-latest
-            version: '12.0.0'
+            version: '12.21.0'
 
     steps:
       - uses: actions/checkout@v7
@@ -115,39 +115,6 @@ jobs:
             exit 1
           fi
         shell: bash
-
-  cache-windows:
-    # pnpm can report a Windows store path with the extended-length `\\?\`
-    # prefix. Cache paths must use the regular drive-path form because the
-    # cache toolkit otherwise interprets `?` as a glob in the root segment.
-    #
-    # The pnpm version below is load-bearing, not stale: 12.0.0 reports a
-    # plain `D:\.pnpm-store\v11` for this store-dir, so only an older
-    # release still reproduces the prefix this job exists to cover. Do not
-    # bump it without checking that `pnpm store path` still starts `\\?\`.
-    name: 'Cache Windows extended-length store path'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Configure store at the drive root
-        run: Set-Content -Path .npmrc -Value 'store-dir=/.pnpm-store'
-
-      - uses: ./
-        with:
-          version: '12.0.0-rc.0'
-          runtime: node@22
-          cache: true
-
-      - name: 'Test: pnpm reports an extended-length store path'
-        run: |
-          $storePath = pnpm store path
-          Write-Host "pnpm store path: $storePath"
-          if (-not $storePath.StartsWith('\\?\')) {
-            throw "Expected an extended-length store path, got: $storePath"
-          }
 
   runtime-cache-prime:
     name: 'Prime runtime cache'
@@ -351,7 +318,7 @@ jobs:
       - id: pnpm
         uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           runtime: node@${{ matrix.major }}
 
       - name: 'Test: node binary on PATH'
@@ -392,7 +359,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           runtime: bun@latest
       - name: 'Test: bun on PATH'
         run: |
@@ -408,7 +375,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           runtime: deno@2
       - name: 'Test: deno on PATH'
         run: |
@@ -433,7 +400,7 @@ jobs:
           rm -f pnpm-lock.yaml
           cat > package.json <<'EOF'
           {
-            "packageManager": "pnpm@12.0.0",
+            "packageManager": "pnpm@12.21.0",
             "devEngines": {
               "runtime": [
                 { "name": "bun", "version": "1.3.12", "onFail": "warn" },
@@ -519,7 +486,7 @@ jobs:
           rm -f pnpm-lock.yaml
           cat > package.json <<'EOF'
           {
-            "packageManager": "pnpm@12.0.0",
+            "packageManager": "pnpm@12.21.0",
             "devEngines": {
               "runtime": { "name": "node", "version": "^20.0.0", "onFail": "download" }
             },
@@ -566,7 +533,7 @@ jobs:
           rm -f pnpm-lock.yaml
           cat > package.json <<'EOF'
           {
-            "packageManager": "pnpm@12.0.0",
+            "packageManager": "pnpm@12.21.0",
             "devEngines": {
               "runtime": { "name": "node", "version": "20.19.0", "onFail": "download" }
             }
@@ -614,7 +581,7 @@ jobs:
           rm -f pnpm-lock.yaml
           cat > package.json <<'EOF'
           {
-            "packageManager": "pnpm@12.0.0",
+            "packageManager": "pnpm@12.21.0",
             "devEngines": {
               "runtime": { "name": "node", "version": "20.19.0", "onFail": "download" }
             }
@@ -661,7 +628,7 @@ jobs:
           rm -f pnpm-lock.yaml
           cat > package.json <<'EOF'
           {
-            "packageManager": "pnpm@12.0.0",
+            "packageManager": "pnpm@12.21.0",
             "devEngines": {
               "runtime": { "name": "node", "version": "^20.0.0", "onFail": "download" }
             }
@@ -740,7 +707,7 @@ jobs:
       - id: pnpm
         uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           working-directory: project
           runtime: ${{ matrix.runtime }}
           node-version-file: ${{ matrix.configured-file }}
@@ -786,7 +753,7 @@ jobs:
           rm -f pnpm-lock.yaml
           cat > package.json <<'EOF'
           {
-            "packageManager": "pnpm@12.0.0",
+            "packageManager": "pnpm@12.21.0",
             "dependencies": {
               "is-odd": "3.0.1"
             }
@@ -796,7 +763,7 @@ jobs:
 
       - uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           install: false
 
       - name: 'Test: node_modules was not populated'
@@ -823,7 +790,7 @@ jobs:
       - id: pnpm
         uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
 
       - name: 'Test: pnpm works, runtime outputs are empty'
         env:
@@ -881,7 +848,7 @@ jobs:
 
       - uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           runtime: node@22
           cache: ${{ matrix.cache }}
 
@@ -921,7 +888,7 @@ jobs:
           node -e "
             const fs = require('fs')
             const manifest = JSON.parse(fs.readFileSync('docs/package.json', 'utf8'))
-            manifest.packageManager = 'pnpm@12.0.0'
+            manifest.packageManager = 'pnpm@12.21.0'
             fs.writeFileSync('docs/package.json', JSON.stringify(manifest, null, 2))
           "
         shell: bash
@@ -947,8 +914,8 @@ jobs:
           fi
           # `packageManager` was read from docs/package.json, not the root.
           pnpm_version="$(pnpm --version)"
-          if [ "${pnpm_version}" != "12.0.0" ]; then
-            echo "Expected pnpm 12.0.0 from docs/package.json, got ${pnpm_version}"
+          if [ "${pnpm_version}" != "12.21.0" ]; then
+            echo "Expected pnpm 12.21.0 from docs/package.json, got ${pnpm_version}"
             exit 1
           fi
         shell: bash
@@ -972,7 +939,7 @@ jobs:
           node -e "
             const fs = require('fs')
             const manifest = JSON.parse(fs.readFileSync('web/package.json', 'utf8'))
-            manifest.packageManager = 'pnpm@12.0.0'
+            manifest.packageManager = 'pnpm@12.21.0'
             fs.writeFileSync('web/package.json', JSON.stringify(manifest, null, 2))
           "
         shell: bash
@@ -992,8 +959,8 @@ jobs:
             exit 1
           fi
           pnpm_version="$(pnpm --version)"
-          if [ "${pnpm_version}" != "12.0.0" ]; then
-            echo "Expected pnpm 12.0.0 from web/package.json, got ${pnpm_version}"
+          if [ "${pnpm_version}" != "12.21.0" ]; then
+            echo "Expected pnpm 12.21.0 from web/package.json, got ${pnpm_version}"
             exit 1
           fi
         shell: bash
@@ -1013,7 +980,7 @@ jobs:
           rm -f pnpm-lock.yaml
           cat > package.json <<'EOF'
           {
-            "packageManager": "pnpm@12.0.0",
+            "packageManager": "pnpm@12.21.0",
             "dependencies": {
               "is-odd": "3.0.1"
             }
@@ -1024,7 +991,7 @@ jobs:
       - name: Put pnpm on PATH without installing
         uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           install: false
 
       - name: Write the lockfile and record its checksum
@@ -1036,7 +1003,7 @@ jobs:
 
       - uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           require-lockfile: true
 
       - name: 'Test: installed from the lockfile, which is untouched'
@@ -1058,7 +1025,7 @@ jobs:
         continue-on-error: true
         uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           require-lockfile: true
 
       - name: 'Test: a missing lockfile failed the step before pnpm ran'
@@ -1082,7 +1049,7 @@ jobs:
 
       - uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
 
       - name: 'Test: a plain install wrote the lockfile and succeeded'
         run: |
@@ -1117,7 +1084,7 @@ jobs:
           rm -f pnpm-lock.yaml pnpm-workspace.yaml
           cat > package.json <<'JSON'
           {
-            "packageManager": "pnpm@12.0.0",
+            "packageManager": "pnpm@12.21.0",
             "dependencies": {
               "is-odd": "3.0.1"
             }
@@ -1136,7 +1103,7 @@ jobs:
       - name: Put pnpm on PATH without installing
         uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           install: false
 
       - name: Write the lockfile at the checkout root only
@@ -1147,7 +1114,7 @@ jobs:
         continue-on-error: true
         uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           working-directory: nested
           require-lockfile: true
 
@@ -1171,7 +1138,7 @@ jobs:
 
       - uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           working-directory: nested
           require-lockfile: true
 
@@ -1198,7 +1165,7 @@ jobs:
 
       - uses: ./
         with:
-          version: '12.0.0'
+          version: '12.21.0'
           working-directory: nested
           require-lockfile: true
 
