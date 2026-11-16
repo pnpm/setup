@@ -4,6 +4,7 @@ import { getState, info } from '@actions/core'
 import { Inputs } from '../inputs/index.js'
 import { pruneStore } from '../pnpm-store-prune/index.js'
 import { fingerprintStore, statStore } from '../store-fingerprint/index.js'
+import { ownsStore } from '../store-owner/index.js'
 
 export async function runSaveCache (inputs: Inputs): Promise<void> {
   const primaryKey = getState('cache_primary_key')
@@ -14,6 +15,15 @@ export async function runSaveCache (inputs: Inputs): Promise<void> {
   // store was left in whatever state that failure produced.
   if (!primaryKey) {
     info('No final cache key was recorded, not saving cache.')
+    return
+  }
+
+  const storeOwnerId = getState('cache_store_owner')
+  if (storeOwnerId && !await ownsStore(cachePath, storeOwnerId)) {
+    // The store now holds what that invocation installed, so saving it under
+    // this invocation's lockfile key would mislabel it. That invocation's
+    // post step, which runs first, decides whether to save it.
+    info('A later pnpm/setup step in this job used the same store, not saving cache.')
     return
   }
 

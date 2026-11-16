@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtempSync } from 'node:fs'
 import os from 'node:os'
+import path from 'node:path'
 import { beforeEach, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
@@ -69,6 +71,9 @@ const bundle = await build({
 const { runRestoreCache, finalizeCache, fingerprintRestoredStore, runSaveCache, saveCache, cache, core, glob, verification, prune, fingerprint } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
 )
+
+// Store ownership markers are written here, not into the real runner temp.
+process.env.RUNNER_TEMP = mkdtempSync(path.join(os.tmpdir(), 'setup-pnpm-test-'))
 
 // cacheDependencyPath is set, so pnpm is never asked where the lockfile is.
 const pnpmBin = '/no/pnpm'
@@ -239,4 +244,25 @@ test('equivalent invocations in one workflow attempt publish distinct save keys'
   assert.equal(keys.length, 2)
   assert.notEqual(keys[0], keys[1])
   for (const key of keys) assert.match(key, /-555-1-[0-9a-f-]{36}$/)
+})
+
+// Two invocations in one job share the store path. The state of each is
+// separate, and their post steps run in reverse order.
+test('an invocation whose store a later invocation in the job reused does not save it', async () => {
+  cache.restoreCache.mock.mockImplementation(async () => sameRuntimeKey)
+  fingerprint.fingerprintStore.mock.mockImplementation(async () => 'restored-store')
+  await restoreBeforeInstall()
+  const first = new Map(core.state)
+  core.state.clear()
+  await restoreBeforeInstall()
+  const second = new Map(core.state)
+  fingerprint.fingerprintStore.mock.mockImplementation(async () => 'changed-store')
+
+  for (const state of [second, first]) {
+    core.state.clear()
+    for (const [key, value] of state) core.state.set(key, value)
+    await runSaveCache(inputs) // eslint-disable-line no-await-in-loop -- post steps run one after another
+  }
+
+  assert.deepEqual(cache.saveCache.mock.calls.map(call => call.arguments[1]), [second.get('cache_primary_key')])
 })
